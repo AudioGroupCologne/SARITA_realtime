@@ -21,14 +21,16 @@
 */
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "Sarita.h"
 
 PluginProcessor::PluginProcessor() : 
 	AudioProcessor(BusesProperties()
-		.withInput("Input", AudioChannelSet::discreteChannels(64), true)
-	    .withOutput("Output", AudioChannelSet::discreteChannels(64), true))
+		.withInput("Input", AudioChannelSet::discreteChannels(2), true)
+	    .withOutput("Output", AudioChannelSet::discreteChannels(2), true))
 {
 	array2sh_create(&hA2sh);
     startTimer(TIMER_PROCESSING_RELATED, 80);
+
 }
 
 PluginProcessor::~PluginProcessor()
@@ -287,6 +289,31 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     nNumOutputs = getTotalNumOutputChannels();
     nSampleRate = (int)(sampleRate + 0.5);
 
+    // SARITA
+    setupSarita(nHostBlockSize);
+#ifdef TESTDATA
+    flogger = std::unique_ptr<FileLogger>(FileLogger::createDateStampedLogger("Sarita", "log", ".txt", "Sarita Log"));
+    
+    for (int i=0; i<nHostBlockSize; i++) {
+        testData[i] = 1.f;
+    }
+    for (int i=1*nHostBlockSize; i<2*nHostBlockSize; i++) {
+        testData[i] = 2.f;
+    }
+    for (int i=2*nHostBlockSize; i<3*nHostBlockSize; i++) {
+        testData[i] = 3.f;
+    }
+    for (int i=3*nHostBlockSize; i<4*nHostBlockSize; i++) {
+        testData[i] = 4.f;
+    }
+//    String tes = "Data: ";
+//    for (int i=0; i<4*nHostBlockSize; i++)
+//        tes += String(testData[i]) + ", ";
+//    tes += "\n=====";
+//    flogger->logMessage(tes);
+    testcount = 0;
+#endif
+    
     array2sh_init(hA2sh, nSampleRate);
     AudioProcessor::setLatencySamples(array2sh_getProcessingDelay());
 }
@@ -295,26 +322,141 @@ void PluginProcessor::releaseResources()
 {
 }
 
+
+void PluginProcessor::processFrame () {
+    // apply hann window TODO: special hann with fade in and fade out over overlap size
+    //ippsMul_32f_I(hannWin, processingBuffer[saritaFrame][ch], nCurrentBlockSize);
+    
+    // convert to cartesian coord.
+//            float sparseGrid[3];
+//            float cart[3]; // x,y,z
+//            #define ANGLESINDEGREES 1
+//            #define NDIRS 3
+//            sph2cart(sparseGrid, NDIRS, ANGLESINDEGREES, cart);
+    // estimate the upsampled array signal p􏰉q, by an interpolation between the signals of the closest neighboured directions separated for magnitude and phase.
+//        pq = (p1 + p2 + p3 + p4) * 0.25;
+//            for (int s = 0; s < SARITA_FRAMESIZE; s++) {
+//                pq_est[ch][s] = p1[ch][s] + p2[ch][s];
+//                channelData[s] = channelData[s] * 0.3f;
+//            }
+//        }
+//        for (int frame = 0; frame < nCurrentBlockSize/SARITA_FRAMESIZE; frame++) {
+//            for (int ch = 0; ch < buffer.getNumChannels(); ch++) { // loop over all frames
+//                saritaFrameData[chsaritaBufferSizea[ch][frame*SARITA_FRAMESIZE];
+//                for (int qd = 0; qd < SARITA_DENSESAMPLINGPOINTS; qd++) { // loop over dense sampling points
+//                    for (int qn = 0; qn < NUM_NEXTNEIGHBOUR; qn++) { // loop over next neighbours
+//                        // determine time shift ∆tN by cross-correlation with restriction: ∆tN < ∆tgeom
+//                        float dtN;
+//    //                    cxcorr(ir_L, ir_R, dtN, dtGeom, dtGeom);
+//                        // calculate weighted mean time shift ∆tN = ∆tN wN
+//                    }
+//                    for (int qn = 0; qn < NUM_NEXTNEIGHBOUR; qn++) { // loop over next neighbours
+//                        // align Bn with ∆tN
+//                        // sum Bn weighted with wN
+//                    }
+//                }
+//            }
+//        }
+    // add overlapping last frame to current
+//            utility_svvadd(tmpBuffer[ch], processingBuffer[ch], SARITA_OVERLAP*nCurrentBlockSize, processingBuffer[ch]);
+    // ippsAdd_32f_I(processingBuffer[ch], tmpBuffer[ch], SARITA_OVERLAP*nCurrentBlockSize);
+}
+
+
 void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*midiMessages*/)
 {
     int nCurrentBlockSize = nHostBlockSize = buffer.getNumSamples();
     nNumInputs = jmin(getTotalNumInputChannels(), buffer.getNumChannels());
     nNumOutputs = jmin(getTotalNumOutputChannels(), buffer.getNumChannels());
-    float** bufferData = buffer.getArrayOfWritePointers();
-    float* pFrameData[MAX_NUM_CHANNELS];
-    int frameSize = array2sh_getFrameSize();
+//    float** bufferData = buffer.getArrayOfWritePointers();
+//    float* pFrameData[MAX_NUM_CHANNELS];
+//    int frameSize = array2sh_getFrameSize();
+//    float* saritaFrameData[SARITA_DENSESAMPLINGPOINTS];
 
-    if((nCurrentBlockSize % frameSize == 0)){ /* divisible by frame size */
-        for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
-            for (int ch = 0; ch < buffer.getNumChannels(); ch++)
-                pFrameData[ch] = &bufferData[ch][frame*frameSize];
+    int overlapSize = SARITA_OVERLAP*nCurrentBlockSize;
+    
+    // fill input ring buffer
+    for (int ch = 0; ch < nNumInputs; ch++) {
+        auto* channelData = buffer.getReadPointer(ch);
+        input->push(channelData, nCurrentBlockSize, ch);
+//        input->push(&testData[testcount*nCurrentBlockSize], nCurrentBlockSize, ch);
+    }
+#ifdef TESTDATA
+    flogger->logMessage("fill w" + String(input->getWriteIdx()) + " buf" + String(input->bufferedBytes));
+    testcount++;
+    testcount %= 4;
+#endif
 
-            /* perform processing */
-            array2sh_process(hA2sh, pFrameData, pFrameData, nNumInputs, nNumOutputs, frameSize);
+    // process frame when frame size fulfilled
+    while (input->bufferedBytes >= nCurrentBlockSize) { // TODO: independent buffer size
+        for (int ch=0; ch<nNumOutputs; ch++) {
+            input->popWithOverlap(processingBuffer[saritaFrame][ch], ch, nCurrentBlockSize, overlapSize);
+            // TODO: process frame
+            ippsMul_32f_I(hannWin, processingBuffer[saritaFrame][ch], nCurrentBlockSize);
+        }
+#ifdef TESTDATA
+        flogger->logMessage("popd r" + String(input->getReadIdx()) + " buf" + String(input->bufferedBytes));
+        String tes = "Frame: " + String(saritaFrame) + "\n";
+        for (int i=0; i<nCurrentBlockSize; i++)
+            tes += String(processingBuffer[!saritaFrame][0][i])  + ", ";
+        tes += "\n=====";
+        flogger->logMessage(tes);
+#endif
+        
+        for (int ch=0; ch<nNumOutputs; ch++) {
+            // add overlapping part of current frame to last frame end
+            int overlapIdx = nCurrentBlockSize-overlapSize;
+            utility_svvadd(&processingBuffer[saritaFrame][ch][0], &processingBuffer[!saritaFrame][ch][overlapIdx], overlapSize, outputBuffer[saritaFrame][ch]);
+        }
+    
+        // copy last overlap to output ring buffer
+        for (int ch=0; ch<nNumOutputs; ch++) {
+            output->push(outputBuffer[saritaFrame][ch], overlapSize, ch);
+        }
+        // copy non overlapping part to output ring buffer
+        for (int ch=0; ch<nNumOutputs; ch++) {
+            output->push(&processingBuffer[saritaFrame][ch][overlapSize], nCurrentBlockSize-2*overlapSize, ch);
+        }
+        saritaFrame ^= 1; // swap buffer
+    }
+    
+    // test output
+//    assert(output->bufferedBytes >= nCurrentBlockSize);
+    if (output->bufferedBytes >= nCurrentBlockSize) {
+        for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
+            float* channelData = buffer.getWritePointer(ch);
+//            flogger->logMessage("out r " + String(output->getReadIdx()) + " w " + String(output->getWriteIdx()) + " buf " + String(output->bufferedBytes));
+            output->pop(channelData, ch, nCurrentBlockSize);
+#ifdef TESTDATA
+            if (ch==0) {
+                String tes = "Frame: " + String(saritaFrame) + "\n";
+                for (int i=0; i<nCurrentBlockSize; i++)
+                    tes += String(channelData[i])  + ", ";
+                tes += "\n=====";
+                flogger->logMessage(tes);
+            }
+#endif
         }
     }
-    else
+    else {
+#ifdef TESTDATA
+        flogger->logMessage("empty r " + String(output->getReadIdx()) + " w " + String(output->getWriteIdx()) + " buf " + String(output->bufferedBytes));
+#endif
         buffer.clear();
+    }
+    /*
+     * process array2sh with dense grid
+     */
+//    if((nCurrentBlockSize % frameSize == 0)){ /* divisible by frame size */
+//        for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
+//            for (int ch = 0; ch < buffer.getNumChannels(); ch++)
+//                pFrameData[ch] = &bufferData[ch][frame*frameSize];
+//            /* perform processing */
+//            array2sh_process(hA2sh, pFrameData, pFrameData, nNumInputs, nNumOutputs, frameSize);
+//        }
+//    }
+//    else
+//        buffer.clear();
 }
 
 //==============================================================================

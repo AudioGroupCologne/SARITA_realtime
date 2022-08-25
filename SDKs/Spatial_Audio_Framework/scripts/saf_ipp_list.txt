@@ -68,3 +68,7 @@ ippsMaxAbsIndx_32f
 ippsMaxAbsIndx_64f
 ippsSum_32f
 ippsSum_64f
+ippsMul_32f_I
+ippsSet_32f
+ippsWinHann_32f_I
+ippsAdd_32f_I

@@ -89,7 +89,7 @@ private:
     int nSampleRate;       /* current host sample rate */
     int nHostBlockSize;    /* typical host block size to expect, in samples */
     File lastDir;
-    ValueTree sensors {"Sensors"}; 
+    ValueTree sensors {"Sensors"};
     
     void timerCallback(int timerID) override
     {
@@ -119,6 +119,9 @@ private:
 public:
     PluginProcessor();
     ~PluginProcessor();
+
+    // Process a SARITA frame
+    void processFrame();
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
