@@ -323,17 +323,70 @@ void PluginProcessor::releaseResources()
 }
 
 
-void PluginProcessor::processFrame () {
-    // apply hann window TODO: special hann with fade in and fade out over overlap size
-    //ippsMul_32f_I(hannWin, processingBuffer[saritaFrame][ch], nCurrentBlockSize);
+void PluginProcessor::processFrame (int blocksize, int numChannels)
+{
+    // apply hann window
+    for (int ch=0; ch<numChannels; ch++) {
+        ippsMul_32f_I(hannWin, processingBuffer[saritaFrame][ch], blocksize);
+    }
     
-    // convert to cartesian coord.
+    // in each frame the cross-correlation required for the upsampling are determined
+    uint8_t n1, n2;
+    for (int n=0; n<cfg.neighborCombLength; n++) {
+        n1 = cfg.neighborCombinations[n][0];
+        n2 = cfg.neighborCombinations[n][1];
+        cxcorr(processingBuffer[saritaFrame][n1], processingBuffer[saritaFrame][n2], xcorrBuffer[n], blocksize, blocksize);
+    }
+    
+    int neighborsIndexCounter=0;
+    
+    for (int dirIdx=0; dirIdx<cfg.denseGridSize; dirIdx++) {
+        int timeShiftMean = 0;
+        int currentTimeShift = 0;
+        // Get nearst neighbors, weights and maxShift for actual direction, can
+        // later be directly addressed in following lines if desired
+        // neighborsIndex = idx_neighbors_dense_grid(dirIndex,1:num_neighbors_dense_grid(dirIndex));
+        uint8_t *neighborsIdx = cfg.idxNeighborsDense[dirIdx];
+        
+        // weights = weights_neighbors_dense_grid(dirIndex,1:num_neighbors_dense_grid(dirIndex));
+        // maxShift = maxShift_dense(dirIndex,1:num_neighbors_dense_grid(dirIndex)-1);
+        // neighborsIRs = irsFrame(neighborsIndex,:); % get all next neighbor irs of one frame and perform windowing
+                  
+//                for nodeIndex = 2:length(neighborsIndex)
+//                    neighborsIndexCounter=neighborsIndexCounter+1;
+//                    correlation=correlationsFrame(:,combination_ptr(1,neighborsIndexCounter));
+//                    if combination_ptr(2,neighborsIndexCounter)==-1
+//                        correlation=correlation(end:-1:1);
+//                     end
+//                    % look for maximal value in the crosscorrelated IRs only in the relevant area
+//                    correlation = correlation(frame_length-maxShift(nodeIndex-1):frame_length+maxShift(nodeIndex-1));
+//                    [~, maxpos] = max(correlation);
+//                    currentTimeShift(nodeIndex) = (maxpos-(length(correlation)+1)/2);
+//                    timeShiftMean = timeShiftMean+currentTimeShift(nodeIndex) * weights(nodeIndex);
+//                end
+//
+//                % align every block according to the calculated time shift, weight
+//                % and sum up
+//               % The following loop needs about 40 % comp.power
+//                for nodeIndex = 1:length(neighborsIndex)
+//                    currentBlock = neighborsIRs(nodeIndex, :) * weights(nodeIndex);
+//                    timeShiftFinal = round(-timeShiftMean + currentTimeShift(nodeIndex) + maxShiftOverall);    % As maxShiftOverall is added, timeShiftFinal will always be positive
+//                    if timeShiftFinal < 0 % Added 22.12.2021 to assure that timeShiftFinal does not become negative
+//                        timeShiftFinal = 0;
+//                    end
+//                    drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
+//                        drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
+//                end
+    }
+    
+    
+// convert to cartesian coord.
 //            float sparseGrid[3];
 //            float cart[3]; // x,y,z
 //            #define ANGLESINDEGREES 1
 //            #define NDIRS 3
 //            sph2cart(sparseGrid, NDIRS, ANGLESINDEGREES, cart);
-    // estimate the upsampled array signal p􏰉q, by an interpolation between the signals of the closest neighboured directions separated for magnitude and phase.
+    // estimate the upsampled array signal p􏰉q, by an interpolation between the signals of the closest neighbored directions separated for magnitude and phase.
 //        pq = (p1 + p2 + p3 + p4) * 0.25;
 //            for (int s = 0; s < SARITA_FRAMESIZE; s++) {
 //                pq_est[ch][s] = p1[ch][s] + p2[ch][s];
@@ -344,22 +397,19 @@ void PluginProcessor::processFrame () {
 //            for (int ch = 0; ch < buffer.getNumChannels(); ch++) { // loop over all frames
 //                saritaFrameData[chsaritaBufferSizea[ch][frame*SARITA_FRAMESIZE];
 //                for (int qd = 0; qd < SARITA_DENSESAMPLINGPOINTS; qd++) { // loop over dense sampling points
-//                    for (int qn = 0; qn < NUM_NEXTNEIGHBOUR; qn++) { // loop over next neighbours
+//                    for (int qn = 0; qn < NUM_NEXTneighbor; qn++) { // loop over next neighbors
 //                        // determine time shift ∆tN by cross-correlation with restriction: ∆tN < ∆tgeom
 //                        float dtN;
 //    //                    cxcorr(ir_L, ir_R, dtN, dtGeom, dtGeom);
 //                        // calculate weighted mean time shift ∆tN = ∆tN wN
 //                    }
-//                    for (int qn = 0; qn < NUM_NEXTNEIGHBOUR; qn++) { // loop over next neighbours
+//                    for (int qn = 0; qn < NUM_NEXTneighbor; qn++) { // loop over next neighbors
 //                        // align Bn with ∆tN
 //                        // sum Bn weighted with wN
 //                    }
 //                }
 //            }
 //        }
-    // add overlapping last frame to current
-//            utility_svvadd(tmpBuffer[ch], processingBuffer[ch], SARITA_OVERLAP*nCurrentBlockSize, processingBuffer[ch]);
-    // ippsAdd_32f_I(processingBuffer[ch], tmpBuffer[ch], SARITA_OVERLAP*nCurrentBlockSize);
 }
 
 
@@ -392,7 +442,8 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         for (int ch=0; ch<nNumOutputs; ch++) {
             input->popWithOverlap(processingBuffer[saritaFrame][ch], ch, nCurrentBlockSize, overlapSize);
             // TODO: process frame
-            ippsMul_32f_I(hannWin, processingBuffer[saritaFrame][ch], nCurrentBlockSize);
+            //ippsMul_32f_I(hannWin, processingBuffer[saritaFrame][ch], nCurrentBlockSize);
+            processFrame(nCurrentBlockSize, nNumOutputs);
         }
 #ifdef TESTDATA
         flogger->logMessage("popd r" + String(input->getReadIdx()) + " buf" + String(input->bufferedBytes));
@@ -421,11 +472,9 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
     }
     
     // test output
-//    assert(output->bufferedBytes >= nCurrentBlockSize);
     if (output->bufferedBytes >= nCurrentBlockSize) {
         for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
             float* channelData = buffer.getWritePointer(ch);
-//            flogger->logMessage("out r " + String(output->getReadIdx()) + " w " + String(output->getWriteIdx()) + " buf " + String(output->bufferedBytes));
             output->pop(channelData, ch, nCurrentBlockSize);
 #ifdef TESTDATA
             if (ch==0) {

@@ -11,6 +11,7 @@ SDKs/modules
 lib/
 *.zip
 *.DS_Store
+*.mat
 .idea/
 cmake-build-debug/
 cmake-build-release/

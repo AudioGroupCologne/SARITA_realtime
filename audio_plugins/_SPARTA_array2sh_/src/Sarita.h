@@ -8,18 +8,18 @@
  
  // loop over dense sampling points
  for q = 1:Q􏰉 do
-    Calculate next neighbours ΩN and weights wN
+    Calculate next neighbors ΩN and weights wN
     Calculate maximum time shift ∆tgeom based on grid geometry
  end for
  
  for f = 1:L do // loop over all frames
     for q = 1:Q􏰉 do  // loop over dense sampling points
-        for qN = 1:ΩN do // loop over next neighbours
+        for qN = 1:ΩN do // loop over next neighbors
             determine time shift ∆tN by cross-correlation with restriction: ∆tN < ∆tgeom
             calculate weighted mean time shift ∆tN = ∆tN wN
         end for
         
-        for qN = 0:ΩN do // loop over next neighbours
+        for qN = 0:ΩN do // loop over next neighbors
             align Bn with ∆tN
             sum Bn weighted with wN
         end for
@@ -33,13 +33,16 @@
 
 #include "ipp.h"
 #include "saf.h"           /* Main include header for SAF */
+#include "/Applications/MATLAB_R2015a.app/extern/include/mat.h"            /* read matlab files */
 
 //#define SARITA_FRAMESIZE 4096
 #define SARITA_OVERLAP 0.25 // 50% = 2048, 25% = 1024 @ 4096 Framesize
 #define SARITA_DENSESAMPLINGPOINTS 64
-#define NUM_NEXTNEIGHBOUR 4
+#define NUM_NEXTneighbor 4
 
-#define TESTDATA 0
+//#define TESTDATA
+int testcount = 0;
+std::unique_ptr<FileLogger> flogger;
 
 /*
 * a multi channel vector ring buffer
@@ -146,7 +149,7 @@ public:
 
 
 /**
- * Main structure for SARITA. Contains variables for audio buffers, ...
+ * TODO: Main structure for SARITA. Contains variables for audio buffers, ...
  */
 //typedef struct _sarita_data
 //{
@@ -155,46 +158,37 @@ public:
 //    float** processingBuffer;              /**< Output SH signals in the time-domain; #MAX_NUM_SH_SIGNALS x #ARRAY2SH_FRAME_SIZE */
 //    float** outputBuffer;
 ////    float_complex*** inputframeTF;  /**< Input sensor signals in the time-domain; #HYBRID_BANDS x #MAX_NUM_SENSORS x #TIME_SLOTS */
-////    float_complex*** SHframeTF;     /**< Output SH signals in the time-domain; #HYBRID_BANDS x #MAX_NUM_SH_SIGNALS x #TIME_SLOTS */
-////    /* time-frequency transform and array details */
-////    float freqVector[HYBRID_BANDS]; /**< frequency vector */
-////    void* hSTFT;                    /**< filterbank handle */
 ////    void* arraySpecs;               /**< array configuration */
 ////    int fs;                         /**< sampling rate, hz */
-////    int new_order;                  /**< new encoding order (current value will be replaced by this after next re-init) */
-////    /* flags */
-////    PROC_STATUS procStatus;         /**< see #PROC_STATUS */
-////    /* additional user parameters that are not included in the array presets */
-////    int order;                      /**< current encoding order */
-////    ARRAY2SH_MICROPHONE_ARRAY_PRESETS preset; /**< currently selected MIC preset */
-////    ARRAY2SH_FILTER_TYPES filterType;  /**< encoding filter approach */
-////    float regPar;                   /**< regularisation upper gain limit, dB; */
-////    CH_ORDER chOrdering;            /**< Ambisonic channel order convention (see #CH_ORDER) */
-////    NORM_TYPES norm;                /**< Ambisonic normalisation convention (see #NORM_TYPES) */
-////    float c;                        /**< speed of sound, m/s */
-////    float gain_dB;                  /**< post gain, dB */
-////    int enableDiffEQpastAliasing;   /**< 0: disabled, 1: enabled */
 //} sarita_data;
 
-
-//juce::AudioBuffer<float> outputBuffer;
-//int inReadIdx, inWriteIdx, outReadIdx, outWriteIdx = 0;
-//juce::AudioBuffer<float> processingBuffer;
-//int readIdx, writeIdx = 0;
 RingBuffer *input;
 RingBuffer *output;
 float*** processingBuffer;
 float*** tmpBuffer;
 float*** outputBuffer;
 
-float testData[4*8192*sizeof(float)];
+float** xcorrBuffer;
 
 int saritaBufferSize = 0;
-int saritaFrame = 0;
+int saritaFrame = 0; // double buffer 0/1
+int outputGridLen = 64;
+
 Ipp32f *hannWin;
 
-int testcount = 0;
-std::unique_ptr<FileLogger> flogger;
+// config data
+struct SaritaConfig {
+    // header
+    int denseGridSize;
+    int maxShiftOverall;
+    int neighborCombLength;    // uint8_t neighborSizeY; always 2?
+    int idxNeighborsDenseLen;
+
+    // data
+    uint8_t** neighborCombinations;
+    // uint8_t** maxShiftDense;
+    uint8_t** idxNeighborsDense;
+} cfg;
 
 
 inline void saritaWin(int len, int overlap)
@@ -211,7 +205,7 @@ inline void saritaWin(int len, int overlap)
     ippsCopy_32f(&tmpWin[overlap], &hannWin[len-overlap], overlap); // ramp down
 }
 
-inline void sarita_nextNeigbours()
+inline void sarita_neigbours()
 {
     ;
 }
@@ -222,19 +216,52 @@ inline AudioSampleBuffer* sarita_upsampling(AudioSampleBuffer& buffer)
 }
 
 
-void setupSarita(int blockSize)
+int setupSarita(int blockSize)
 {
     saritaBufferSize = 2*blockSize; //  (2 - SARITA_OVERLAP)*blockSize;
- 
     saritaWin(blockSize, blockSize*SARITA_OVERLAP);
     
-    // TODO: dense channels
-    processingBuffer = (float***)calloc3d(2, 2, blockSize, sizeof(float));
-    tmpBuffer = (float***)calloc3d(2, 2, blockSize*SARITA_OVERLAP, sizeof(float));
-    outputBuffer = (float***)calloc3d(2, 2, blockSize, sizeof(float));
+    char path[256] = { "/Users/gary/Documents/GitHub/SARITA_realtime/config.dat" };
+    FILE* configFile = fopen(path, "rb");
+    // read config file header data
+    // dense gridSize, maxShiftOverall, neighborCombLength, idxNeighborsDenseLen
+    size_t result = fread(&cfg, sizeof(int), 4, configFile);
+    
+    // neighbor combinations
+    uint8_t* tmp = (uint8_t*) malloc(cfg.neighborCombLength * 2 * sizeof(uint8_t));
+    cfg.neighborCombinations = (uint8_t**)calloc2d(cfg.neighborCombLength, 2, sizeof(uint8_t));
+    result = fread(tmp, sizeof(uint8_t), cfg.neighborCombLength * 2, configFile);
+    // copy with stride 2
+    for (int y=0; y<2; y++) {
+        for (int x=0; x<cfg.neighborCombLength; x++) {
+            cfg.neighborCombinations[x][y] = tmp[x*2 + y];
+        }
+    }
+    free(tmp);
+        
+    // dense grid neighbors index
+    tmp = (uint8_t*) malloc(cfg.idxNeighborsDenseLen * cfg.denseGridSize * sizeof(uint8_t));
+    cfg.idxNeighborsDense = (uint8_t**)calloc2d(cfg.denseGridSize, cfg.idxNeighborsDenseLen, sizeof(uint8_t));
+    result = fread(tmp, sizeof(uint8_t), cfg.denseGridSize * cfg.idxNeighborsDenseLen, configFile);
+    // copy with stride 2
+    for (int x=0; x<cfg.idxNeighborsDenseLen; x++) {
+        for (int y=0; y<cfg.denseGridSize; y++) {
+            cfg.idxNeighborsDense[x][y] = tmp[x*cfg.denseGridSize + y];
+//            int z = cfg.idxNeighborsDense[x][y];
+//            DBG(String(x) + " " + String(y) + " = " + String(z));
+        }
+    }
+    free(tmp);
+    
+    // allocate buffers   // TODO: dense channels
+    processingBuffer = (float***)calloc3d(2, 64, blockSize, sizeof(float));
+    tmpBuffer = (float***)calloc3d(2, 64, blockSize*SARITA_OVERLAP, sizeof(float));
+    outputBuffer = (float***)calloc3d(2, 64, blockSize, sizeof(float));
+    xcorrBuffer = (float**)calloc2d(cfg.neighborCombLength, blockSize + cfg.maxShiftOverall, sizeof(float));
     
     input = new RingBuffer(2, saritaBufferSize);
     output = new RingBuffer(2, saritaBufferSize);
+    
+    return result;
 }
-
 #endif /* sarita_h */
