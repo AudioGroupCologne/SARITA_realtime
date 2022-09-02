@@ -23,7 +23,7 @@
 #include "PluginEditor.h"
 #include "Sarita.h"
 
-PluginProcessor::PluginProcessor() : 
+PluginProcessor::PluginProcessor() :
 	AudioProcessor(BusesProperties()
 		.withInput("Input", AudioChannelSet::discreteChannels(2), true)
 	    .withOutput("Output", AudioChannelSet::discreteChannels(2), true))
@@ -291,6 +291,17 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     // SARITA
     setupSarita(nHostBlockSize);
+    
+    IppStatus stat;
+    // TODO: dstLen = maxhsift? 13 anstatt blocksize?
+    stat = ippsCrossCorrNormGetBufferSize(nHostBlockSize, nHostBlockSize, nHostBlockSize, 0, ipp32f, ippAlgAuto, &tmpXcorrBufferSize);
+    tmpXcorrBuffer = ippsMalloc_8u(tmpXcorrBufferSize);
+    correlation = ippsMalloc_32f(nHostBlockSize * 2);
+    tmpCorr = ippsMalloc_32f(2*cfg.maxShiftOverall);
+    
+    currentTimeShift = (int*)malloc(cfg.idxNeighborsDenseLen * sizeof(int)); // TODO: correct size?
+    currentBlock = ippsMalloc_32f(nHostBlockSize);
+    
 #ifdef TESTDATA
     flogger = std::unique_ptr<FileLogger>(FileLogger::createDateStampedLogger("Sarita", "log", ".txt", "Sarita Log"));
     
@@ -322,94 +333,74 @@ void PluginProcessor::releaseResources()
 {
 }
 
-
 void PluginProcessor::processFrame (int blocksize, int numChannels)
 {
     // apply hann window
     for (int ch=0; ch<numChannels; ch++) {
-        ippsMul_32f_I(hannWin, processingBuffer[saritaFrame][ch], blocksize);
+        input->popWithOverlap(processingBuffer[BufferNum][ch], ch, blocksize, saritaOverlapSize);
+        ippsMul_32f_I(hannWin, processingBuffer[BufferNum][ch], blocksize);
     }
     
     // in each frame the cross-correlation required for the upsampling are determined
     uint8_t n1, n2;
-    for (int n=0; n<cfg.neighborCombLength; n++) {
-        n1 = cfg.neighborCombinations[n][0];
-        n2 = cfg.neighborCombinations[n][1];
-        cxcorr(processingBuffer[saritaFrame][n1], processingBuffer[saritaFrame][n2], xcorrBuffer[n], blocksize, blocksize);
+    for (int n=0; n<96; /*cfg.neighborCombLength;*/ n++) {
+        n1 = 0; //cfg.neighborCombinations[n][0];
+        n2 = 1; //cfg.neighborCombinations[n][1];
+        // cxcorr(processingBuffer[BufferNum][n1], processingBuffer[BufferNum][n2], xcorrBuffer[n], blocksize, blocksize); // cpu hog
+        // vDSP_conv(processingBuffer[BufferNum][n1], 1, processingBuffer[BufferNum][n2], 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
+        ippsCrossCorrNorm_32f(processingBuffer[BufferNum][n1], blocksize, processingBuffer[BufferNum][n2], blocksize, xcorrBuffer[n], blocksize, 0, ippAlgAuto, tmpXcorrBuffer); // performs best, switches to fft calc at higher block sizes
+        // TODO: norm ok? max lag? len of xcorr = 2*blocksize-1?
     }
-    
-    int neighborsIndexCounter=0;
-    
+
+    int neighborsIndexCounter=0; // Counter which entry in combination_ptr is to be assessed
     for (int dirIdx=0; dirIdx<cfg.denseGridSize; dirIdx++) {
-        int timeShiftMean = 0;
-        int currentTimeShift = 0;
+        memset(currentTimeShift, 0, cfg.idxNeighborsDenseLen);
+        float timeShiftMean = 0;
         // Get nearst neighbors, weights and maxShift for actual direction, can
         // later be directly addressed in following lines if desired
         // neighborsIndex = idx_neighbors_dense_grid(dirIndex,1:num_neighbors_dense_grid(dirIndex));
-        uint8_t *neighborsIdx = cfg.idxNeighborsDense[dirIdx];
-        
+//        uint8_t *neighborsIdx = cfg.idxNeighborsDense[dirIdx]; // pointer to e.g. 6 neighbor indices // TODO: flip matrix / x y umsortieren!
         // weights = weights_neighbors_dense_grid(dirIndex,1:num_neighbors_dense_grid(dirIndex));
+//        float *weights = cfg.weightsNeighborsDense[dirIdx]; // pointer to weights
         // maxShift = maxShift_dense(dirIndex,1:num_neighbors_dense_grid(dirIndex)-1);
-        // neighborsIRs = irsFrame(neighborsIndex,:); % get all next neighbor irs of one frame and perform windowing
-                  
-//                for nodeIndex = 2:length(neighborsIndex)
-//                    neighborsIndexCounter=neighborsIndexCounter+1;
-//                    correlation=correlationsFrame(:,combination_ptr(1,neighborsIndexCounter));
-//                    if combination_ptr(2,neighborsIndexCounter)==-1
-//                        correlation=correlation(end:-1:1);
-//                     end
-//                    % look for maximal value in the crosscorrelated IRs only in the relevant area
-//                    correlation = correlation(frame_length-maxShift(nodeIndex-1):frame_length+maxShift(nodeIndex-1));
-//                    [~, maxpos] = max(correlation);
-//                    currentTimeShift(nodeIndex) = (maxpos-(length(correlation)+1)/2);
-//                    timeShiftMean = timeShiftMean+currentTimeShift(nodeIndex) * weights(nodeIndex);
-//                end
-//
-//                % align every block according to the calculated time shift, weight
-//                % and sum up
-//               % The following loop needs about 40 % comp.power
-//                for nodeIndex = 1:length(neighborsIndex)
-//                    currentBlock = neighborsIRs(nodeIndex, :) * weights(nodeIndex);
-//                    timeShiftFinal = round(-timeShiftMean + currentTimeShift(nodeIndex) + maxShiftOverall);    % As maxShiftOverall is added, timeShiftFinal will always be positive
-//                    if timeShiftFinal < 0 % Added 22.12.2021 to assure that timeShiftFinal does not become negative
-//                        timeShiftFinal = 0;
-//                    end
-//                    drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
-//                        drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
-//                end
+        uint8_t *maxShift = cfg.maxShiftDense[dirIdx]; // pointer to shifts
+        
+        for(int nodeIndex=1; nodeIndex<cfg.idxNeighborsDenseLen; nodeIndex++) {
+            neighborsIndexCounter++;
+            // correlation=correlationsFrame(:,combination_ptr(1,neighborsIndexCounter));
+            correlation = xcorrBuffer[cfg.combinationsPtr[0][neighborsIndexCounter]];
+            if (cfg.combinationsPtr[1][neighborsIndexCounter] == -1) {
+                ippsFlip_32f_I(correlation, blocksize*2-1); // TODO: length ok?  why reverse vector?
+            }
+            // look for maximal value in the crosscorrelated IRs only in the relevant area
+            // correlation = correlation(frame_length-maxShift(nodeIndex-1):frame_length+maxShift(nodeIndex-1));
+            int lagIdx = blocksize-maxShift[nodeIndex-1]; // TODO: why nodeindex-1?
+            int maxPos;
+            int corrLen = 2*maxShift[nodeIndex-1]+1; // TODO: correct?
+            Ipp32f maxVal;
+            ippsMaxIndx_32f(&correlation[lagIdx], corrLen, &maxVal, &maxPos);
+            currentTimeShift[nodeIndex] = (maxPos - (corrLen + 1) / 2);
+            timeShiftMean += currentTimeShift[nodeIndex] * cfg.weightsNeighborsDense[dirIdx][nodeIndex];
+        }
+        
+        // TODO: neighborsIRs = irsFrame(neighborsIndex,:); % get all next neighbor irs of one frame and perform windowing
+        // TODO: for each neighborIR
+        // align every block according to the calculated time shift, weight and sum up
+        for (int nodeIndex=0; nodeIndex<cfg.numNeighborsDense[dirIdx]; nodeIndex++) {
+            // currentBlock = neighborsIRs(nodeIndex, :) * weights(nodeIndex);
+            int idx = cfg.idxNeighborsDense[dirIdx][nodeIndex];
+            ippsMulC_32f(processingBuffer[BufferNum][idx], cfg.weightsNeighborsDense[dirIdx][nodeIndex], currentBlock, blocksize);
+            int timeShiftFinal = round(-timeShiftMean + currentTimeShift[nodeIndex] + cfg.maxShiftOverall); // As maxShiftOverall is added, timeShiftFinal will always be positive
+            timeShiftFinal = (timeShiftFinal < 0) ? 0: timeShiftFinal; // Added 22.12.2021 to assure that timeShiftFinal does not become negative
+            
+            //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
+            //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
+            
+            // TODO: damn timeshift in output buffer
+            // TODO: upsampledBuffer[dirIdx][]
+        }
     }
     
-    
-// convert to cartesian coord.
-//            float sparseGrid[3];
-//            float cart[3]; // x,y,z
-//            #define ANGLESINDEGREES 1
-//            #define NDIRS 3
-//            sph2cart(sparseGrid, NDIRS, ANGLESINDEGREES, cart);
-    // estimate the upsampled array signal p􏰉q, by an interpolation between the signals of the closest neighbored directions separated for magnitude and phase.
-//        pq = (p1 + p2 + p3 + p4) * 0.25;
-//            for (int s = 0; s < SARITA_FRAMESIZE; s++) {
-//                pq_est[ch][s] = p1[ch][s] + p2[ch][s];
-//                channelData[s] = channelData[s] * 0.3f;
-//            }
-//        }
-//        for (int frame = 0; frame < nCurrentBlockSize/SARITA_FRAMESIZE; frame++) {
-//            for (int ch = 0; ch < buffer.getNumChannels(); ch++) { // loop over all frames
-//                saritaFrameData[chsaritaBufferSizea[ch][frame*SARITA_FRAMESIZE];
-//                for (int qd = 0; qd < SARITA_DENSESAMPLINGPOINTS; qd++) { // loop over dense sampling points
-//                    for (int qn = 0; qn < NUM_NEXTneighbor; qn++) { // loop over next neighbors
-//                        // determine time shift ∆tN by cross-correlation with restriction: ∆tN < ∆tgeom
-//                        float dtN;
-//    //                    cxcorr(ir_L, ir_R, dtN, dtGeom, dtGeom);
-//                        // calculate weighted mean time shift ∆tN = ∆tN wN
-//                    }
-//                    for (int qn = 0; qn < NUM_NEXTneighbor; qn++) { // loop over next neighbors
-//                        // align Bn with ∆tN
-//                        // sum Bn weighted with wN
-//                    }
-//                }
-//            }
-//        }
 }
 
 
@@ -422,8 +413,6 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
 //    float* pFrameData[MAX_NUM_CHANNELS];
 //    int frameSize = array2sh_getFrameSize();
 //    float* saritaFrameData[SARITA_DENSESAMPLINGPOINTS];
-
-    int overlapSize = SARITA_OVERLAP*nCurrentBlockSize;
     
     // fill input ring buffer
     for (int ch = 0; ch < nNumInputs; ch++) {
@@ -439,12 +428,9 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
 
     // process frame when frame size fulfilled
     while (input->bufferedBytes >= nCurrentBlockSize) { // TODO: independent buffer size
-        for (int ch=0; ch<nNumOutputs; ch++) {
-            input->popWithOverlap(processingBuffer[saritaFrame][ch], ch, nCurrentBlockSize, overlapSize);
-            // TODO: process frame
-            //ippsMul_32f_I(hannWin, processingBuffer[saritaFrame][ch], nCurrentBlockSize);
-            processFrame(nCurrentBlockSize, nNumOutputs);
-        }
+        // process frame for all channels
+        processFrame(nCurrentBlockSize, nNumOutputs); // TODO: channel num
+
 #ifdef TESTDATA
         flogger->logMessage("popd r" + String(input->getReadIdx()) + " buf" + String(input->bufferedBytes));
         String tes = "Frame: " + String(saritaFrame) + "\n";
@@ -454,21 +440,21 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         flogger->logMessage(tes);
 #endif
         
+        // add overlapping part of current frame to last frame end
         for (int ch=0; ch<nNumOutputs; ch++) {
-            // add overlapping part of current frame to last frame end
-            int overlapIdx = nCurrentBlockSize-overlapSize;
-            utility_svvadd(&processingBuffer[saritaFrame][ch][0], &processingBuffer[!saritaFrame][ch][overlapIdx], overlapSize, outputBuffer[saritaFrame][ch]);
+            int overlapIdx = nCurrentBlockSize-saritaOverlapSize;
+            utility_svvadd(&processingBuffer[BufferNum][ch][0], &processingBuffer[!BufferNum][ch][overlapIdx], saritaOverlapSize, outputBuffer[BufferNum][ch]);
         }
     
         // copy last overlap to output ring buffer
         for (int ch=0; ch<nNumOutputs; ch++) {
-            output->push(outputBuffer[saritaFrame][ch], overlapSize, ch);
+            output->push(outputBuffer[BufferNum][ch], saritaOverlapSize, ch);
         }
         // copy non overlapping part to output ring buffer
         for (int ch=0; ch<nNumOutputs; ch++) {
-            output->push(&processingBuffer[saritaFrame][ch][overlapSize], nCurrentBlockSize-2*overlapSize, ch);
+            output->push(&processingBuffer[BufferNum][ch][saritaOverlapSize], nCurrentBlockSize-2*saritaOverlapSize, ch);
         }
-        saritaFrame ^= 1; // swap buffer
+        BufferNum ^= 1; // swap buffer
     }
     
     // test output

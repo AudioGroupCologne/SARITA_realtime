@@ -72,3 +72,7 @@ ippsMul_32f_I
 ippsSet_32f
 ippsWinHann_32f_I
 ippsAdd_32f_I
+ippsCrossCorrNormGetBufferSize
+ippsCrossCorrNorm_32f
+ippsFlip_32f_I
+ippsMaxIndx_32f
