@@ -33,12 +33,9 @@
 
 #include "ipp.h"
 #include "saf.h"           /* Main include header for SAF */
-#include "/Applications/MATLAB_R2015a.app/extern/include/mat.h"            /* read matlab files */
 
 //#define SARITA_FRAMESIZE 4096
 #define SARITA_OVERLAP 0.25 // 50% = 2048, 25% = 1024 @ 4096 Framesize
-#define SARITA_DENSESAMPLINGPOINTS 64
-#define NUM_NEXTneighbor 4
 
 //#define TESTDATA
 int testcount = 0;
@@ -187,25 +184,22 @@ Ipp32f *hannWin;
 int* currentTimeShift;
 Ipp32f* currentBlock;
 
-/*
-combination_ptr                = zeros(2, 0);                   % Array describing which neighborsCombination is required for each the cross correlations
-*/
 // config data
 struct SaritaConfig {
     // header
     int denseGridSize;
     int maxShiftOverall;
-    int neighborCombLength; // neighborCombinations size = neighborCombLength * 2
+    int neighborCombLength;  // neighborCombinations size = neighborCombLength * 2
     int idxNeighborsDenseLen; // idxNeighborsDense array size = idxNeighborsDenseLen * dense grid size
-    int combinationsPtrLen; // length of combinations pointer, y is always 2
+    int combinationsPtrLen;  // length of combinations pointer, y is always 2
 
     // data
     uint8_t** neighborCombinations; // Array containing all combinations of nearest neighbors
-    int* numNeighborsDense;         // Number of nearest neighbors for each sampling point
-    uint8_t** idxNeighborsDense;    // Indices of neighbors of each sampling point (max 4??)
+    uint8_t* numNeighborsDense;     // Number of nearest neighbors for each sampling point
+    uint8_t** idxNeighborsDense;    // Indices of neighbors of each sampling point
     float** weightsNeighborsDense;  // Weights of neighbors of each sampling point
     uint8_t** maxShiftDense;
-    int8_t** combinationsPtr;
+    int8_t** combinationsPtr;       // Array describing which neighbors combination is required for each cross correlations
 } cfg;
 
 inline void saritaWin(int len, int overlap)
@@ -227,71 +221,79 @@ inline void sarita_neigbours()
     ;
 }
 
-inline AudioSampleBuffer* sarita_upsampling(AudioSampleBuffer& buffer)
+
+int readArrayUint8(FILE *fid, uint8_t** dst, int sizeX, int sizeY)
 {
-    ;
+    uint8_t* tmp = (uint8_t*) malloc(sizeX * sizeY * sizeof(uint8_t));
+    int result = fread(tmp, sizeof(uint8_t), sizeX * sizeY, fid);
+    // copy with stride
+    for (int x=0; x<sizeX; x++) {
+        for (int y=0; y<sizeY; y++) {
+            dst[x][y] = tmp[x*sizeY + y];
+//            int z = dst[x][y];
+//            DBG(String(x) + " " + String(y) + " = " + String(z));
+        }
+    }
+    free(tmp);
+    return result;
+}
+
+int readArrayFloat(FILE *fid, float** dst, int sizeX, int sizeY)
+{
+    float* tmp = (float*) malloc(sizeX * sizeY * sizeof(float));
+    int result = fread(tmp, sizeof(float), sizeX * sizeY, fid);
+    // copy with stride
+    for (int x=0; x<sizeX; x++) {
+        for (int y=0; y<sizeY; y++) {
+            dst[x][y] = tmp[x*sizeY + y];
+            float z = dst[x][y];
+            DBG(String(x) + " " + String(y) + " = " + String(z));
+        }
+    }
+    free(tmp);
+    return result;
 }
 
 
-int setupSarita(int blockSize)
+/*
+* read config data from matlab workspace dump
+*/
+inline int saritaReadConfigFile(char* path)
 {
-    saritaBufferSize = 2*blockSize; //  (2 - SARITA_OVERLAP)*blockSize;
-    saritaOverlapSize = SARITA_OVERLAP*blockSize;
-    saritaWin(blockSize, saritaOverlapSize);
-    
-    /*
-    * read config data from matlab workspace dump
-    */
-    char path[256] = { "/Users/gary/Documents/GitHub/SARITA_realtime/config.dat" };
     FILE* configFile = fopen(path, "rb");
+
     // read config file header data
-    // dense gridSize, maxShiftOverall, neighborCombLength, idxNeighborsDenseLen
-    size_t result = fread(&cfg, sizeof(int), 4, configFile);
-    
+    // dense gridSize, maxShiftOverall, neighborCombLength, idxNeighborsDenseLen, combinationPtrLen
+    size_t result = fread(&cfg, sizeof(int), 5, configFile);
+
     // neighbor combinations
-    uint8_t* tmp = (uint8_t*) malloc(cfg.neighborCombLength * 2 * sizeof(uint8_t));
     cfg.neighborCombinations = (uint8_t**)calloc2d(cfg.neighborCombLength, 2, sizeof(uint8_t));
-    result = fread(tmp, sizeof(uint8_t), cfg.neighborCombLength * 2, configFile);
-    // copy with stride 2
-    for (int y=0; y<2; y++) {
-        for (int x=0; x<cfg.neighborCombLength; x++) {
-            cfg.neighborCombinations[x][y] = tmp[x*2 + y];
-        }
-    }
-    free(tmp);
+    result = readArrayUint8(configFile, cfg.neighborCombinations, cfg.neighborCombLength, 2);
+
+//    uint8_t* tmp = (uint8_t*) malloc(cfg.neighborCombLength * 2 * sizeof(uint8_t));
+//    cfg.neighborCombinations = (uint8_t**)calloc2d(cfg.neighborCombLength, 2, sizeof(uint8_t));
+//    result = fread(tmp, sizeof(uint8_t), cfg.neighborCombLength * 2, configFile);
+//    // copy with stride 2
+//    for (int y=0; y<2; y++) {
+//        for (int x=0; x<cfg.neighborCombLength; x++) {
+//            cfg.neighborCombinations[x][y] = tmp[x*2 + y];
+//        }
+//    }
+//    free(tmp);
     
+
     // num of neighbors dense grid
-    cfg.numNeighborsDense = (int*)malloc(cfg.denseGridSize * sizeof(int));
-    result = fread(cfg.numNeighborsDense, sizeof(int), cfg.denseGridSize, configFile);
-    
+    cfg.numNeighborsDense = (uint8_t*)malloc(cfg.denseGridSize * sizeof(uint8_t));
+    result = fread(cfg.numNeighborsDense, sizeof(uint8_t), cfg.denseGridSize, configFile);
+
     // dense grid neighbors index
-    tmp = (uint8_t*) malloc(cfg.idxNeighborsDenseLen * cfg.denseGridSize * sizeof(uint8_t));
     cfg.idxNeighborsDense = (uint8_t**)calloc2d(cfg.denseGridSize, cfg.idxNeighborsDenseLen, sizeof(uint8_t));
-    result = fread(tmp, sizeof(uint8_t), cfg.denseGridSize * cfg.idxNeighborsDenseLen, configFile);
-    // copy with stride
-    for (int x=0; x<cfg.idxNeighborsDenseLen; x++) {
-        for (int y=0; y<cfg.denseGridSize; y++) {
-            cfg.idxNeighborsDense[x][y] = tmp[x*cfg.denseGridSize + y];
-            int z = cfg.idxNeighborsDense[x][y];
-            DBG(String(x) + " " + String(y) + " = " + String(z));
-        }
-    }
-    free(tmp);
-    
+    result = readArrayUint8(configFile, cfg.idxNeighborsDense, cfg.idxNeighborsDenseLen, cfg.denseGridSize);
+
     // dense grid neighbors weights
-    float* ftmp = (float*) malloc(cfg.idxNeighborsDenseLen * cfg.denseGridSize * sizeof(float));
     cfg.weightsNeighborsDense = (float**)calloc2d(cfg.denseGridSize, cfg.idxNeighborsDenseLen, sizeof(float));
-    result = fread(ftmp, sizeof(float), cfg.denseGridSize * cfg.idxNeighborsDenseLen, configFile);
-    // copy with stride
-    for (int x=0; x<cfg.idxNeighborsDenseLen; x++) {
-        for (int y=0; y<cfg.denseGridSize; y++) {
-            cfg.weightsNeighborsDense[x][y] = ftmp[x*cfg.denseGridSize + y];
-            float z = cfg.weightsNeighborsDense[x][y];
-            DBG(String(x) + " " + String(y) + " = " + String(z));
-        }
-    }
-    free(ftmp);
-    
+    result = readArrayFloat(configFile, cfg.weightsNeighborsDense, cfg.idxNeighborsDenseLen, cfg.denseGridSize);
+
     // max shift dense
     tmp = (uint8_t*) malloc(cfg.idxNeighborsDenseLen * cfg.denseGridSize * sizeof(uint8_t));
     cfg.maxShiftDense = (uint8_t**)calloc2d(cfg.denseGridSize, cfg.idxNeighborsDenseLen-1, sizeof(uint8_t));
@@ -300,12 +302,39 @@ int setupSarita(int blockSize)
     for (int x=0; x<cfg.idxNeighborsDenseLen-1; x++) {
         for (int y=0; y<cfg.denseGridSize; y++) {
             cfg.maxShiftDense[x][y] = tmp[x*cfg.denseGridSize + y];
-//            int z = cfg.maxShiftDense[x][y];
-//            DBG(String(x) + " " + String(y) + " = " + String(z));
+        // int z = cfg.maxShiftDense[x][y];
+        // DBG(String(x) + " " + String(y) + " = " + String(z));
         }
     }
     free(tmp);
+
+    // combination Pointer
+    int8_t *ctmp = (int8_t*) malloc(cfg.combinationsPtrLen * 2 * sizeof(int8_t));
+    cfg.combinationsPtr = (int8_t**)calloc2d(2, cfg.combinationsPtrLen, sizeof(int8_t));
+    result = fread(ctmp, sizeof(int8_t), cfg.combinationsPtrLen * 2, configFile);
+    // copy with stride
+    for (int x=0; x<cfg.combinationsPtrLen; x++) {
+        for (int y=0; y<2; y++) {
+            cfg.combinationsPtr[x][y] = ctmp[x*cfg.combinationsPtrLen + y];
+            int z = cfg.combinationsPtr[x][y];
+            DBG(String(x) + " " + String(y) + " = " + String(z));
+        }
+    }
+    free(ctmp);
+
+    return result;
+}
+
+int setupSarita(int blockSize)
+{
+    saritaBufferSize = 2*blockSize; //  (2 - SARITA_OVERLAP)*blockSize;
+    saritaOverlapSize = SARITA_OVERLAP*blockSize;
     
+    saritaWin(blockSize, saritaOverlapSize);
+    
+    char path[256] = { "/Users/gary/Documents/GitHub/SARITA_realtime/config.dat" };
+    saritaReadConfigFile(path);
+        
     // allocate buffers   // TODO: dense channels
     processingBuffer = (float***)calloc3d(2, 64, blockSize, sizeof(float));
     tmpBuffer = (float***)calloc3d(2, 64, blockSize*SARITA_OVERLAP, sizeof(float));
@@ -315,6 +344,5 @@ int setupSarita(int blockSize)
     input = new RingBuffer(2, saritaBufferSize);
     output = new RingBuffer(2, saritaBufferSize);
     
-    return result;
 }
 #endif /* sarita_h */
