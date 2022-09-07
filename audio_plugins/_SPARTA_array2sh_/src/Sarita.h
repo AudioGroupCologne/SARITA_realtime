@@ -269,16 +269,23 @@ inline int saritaReadConfigFile(const char* path)
     result = fread(cfg.numNeighborsDense, sizeof(uint8_t), cfg.denseGridSize, configFile);
 
     // dense grid neighbors index
-    cfg.idxNeighborsDense = (uint8_t**)calloc2d(cfg.denseGridSize, cfg.idxNeighborsDenseLen, sizeof(uint8_t));
+    cfg.idxNeighborsDense = (uint8_t**)calloc2d(cfg.idxNeighborsDenseLen, cfg.denseGridSize, sizeof(uint8_t));
     result = readArrayUint8(configFile, cfg.idxNeighborsDense, cfg.idxNeighborsDenseLen, cfg.denseGridSize);
 
     // dense grid neighbors weights
-    cfg.weightsNeighborsDense = (float**)calloc2d(cfg.denseGridSize, cfg.idxNeighborsDenseLen, sizeof(float));
+    cfg.weightsNeighborsDense = (float**)calloc2d(cfg.idxNeighborsDenseLen, cfg.denseGridSize, sizeof(float));
     result = readArrayFloat(configFile, cfg.weightsNeighborsDense, cfg.idxNeighborsDenseLen, cfg.denseGridSize);
 
     // max shift dense
-    cfg.maxShiftDense = (uint8_t**)calloc2d(cfg.denseGridSize, cfg.idxNeighborsDenseLen-1, sizeof(uint8_t));
+    cfg.maxShiftDense = (uint8_t**)calloc2d(cfg.idxNeighborsDenseLen-1, cfg.denseGridSize, sizeof(uint8_t));
     result = readArrayUint8(configFile, cfg.maxShiftDense, cfg.idxNeighborsDenseLen-1, cfg.denseGridSize);
+//
+//    for (int x=0; x< (cfg.idxNeighborsDenseLen-1); x++) {
+//        for (int y=0; y<cfg.denseGridSize; y++) {
+//            int z = cfg.maxShiftDense[x][y];
+//            DBG(String(x) + " " + String(y) + " = " + String(z));
+//        }
+//    }
     
     // combination Pointer
     cfg.combinationsPtr = (int8_t**)calloc2d(cfg.combinationsPtrLen, 2, sizeof(int8_t));
@@ -335,18 +342,24 @@ inline void processFrame (int blocksize, int numInputChannels)
 {
     // apply hann window
     for (int ch=0; ch<numInputChannels; ch++) {
-        input->popWithOverlap(sparseBuffer[BufferNum][ch], ch, blocksize, saritaOverlapSize); // TODO: maybe no double buffer needed here
-        ippsMul_32f_I(hannWin, sparseBuffer[BufferNum][ch], blocksize);
+        input->popWithOverlap(sparseBuffer[0][ch], ch, blocksize, saritaOverlapSize); // TODO: maybe no double buffer needed here
+        ippsMul_32f_I(hannWin, sparseBuffer[0][ch], blocksize);
+//        memset(denseBuffer[BufferNum][ch], 0, blocksize);
+//        ippsAdd_32f_I(sparseBuffer[BufferNum][ch],  &denseBuffer[BufferNum][ch][0], blocksize-0);
+//        ippsCopy_32f(sparseBuffer[BufferNum][ch], denseBuffer[BufferNum][ch], blocksize);
     }
     
     // in each frame the cross-correlation required for the upsampling are determined
     uint8_t n1, n2;
     for (int n=0; n<cfg.neighborCombLength; n++) {
-        n1 = 0; //cfg.neighborCombinations[n][0];
-        n2 = 1; //cfg.neighborCombinations[n][1];
+        n1 = cfg.neighborCombinations[n][0];
+        n2 = cfg.neighborCombinations[n][1];
+        // safety limit to num channels. TODO: assert?
+        n1 = n1 > 64? 64 : n1;
+        n2 = n2 > 64? 64 : n2;
         // cxcorr(processingBuffer[BufferNum][n1], processingBuffer[BufferNum][n2], xcorrBuffer[n], blocksize, blocksize); // cpu hog
         // vDSP_conv(processingBuffer[BufferNum][n1], 1, processingBuffer[BufferNum][n2], 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
-        ippsCrossCorrNorm_32f(sparseBuffer[BufferNum][n1], blocksize, sparseBuffer[BufferNum][n2], blocksize, xcorrBuffer[n], xcorrLen, 0, ippAlgAuto, tmpXcorrBuffer); // performs best, switches to fft calc at higher block sizes
+        ippsCrossCorrNorm_32f(sparseBuffer[BufferNum][n1-1], blocksize, sparseBuffer[BufferNum][n2-1], blocksize, xcorrBuffer[n], xcorrLen, 0, ippAlgAuto, tmpXcorrBuffer); // performs best, switches to fft calc at higher block sizes
         // TODO: norm ok? max lag? len of xcorr = 2*blocksize-1?
     }
 
@@ -361,41 +374,42 @@ inline void processFrame (int blocksize, int numInputChannels)
         // weights = weights_neighbors_dense_grid(dirIndex,1:num_neighbors_dense_grid(dirIndex));
         // float *weights = cfg.weightsNeighborsDense[dirIdx]; // pointer to weights
         // maxShift = maxShift_dense(dirIndex,1:num_neighbors_dense_grid(dirIndex)-1);
-        uint8_t *maxShift = cfg.maxShiftDense[dirIdx]; // pointer to shifts
-        
+//        uint8_t *maxShift = cfg.maxShiftDense[dirIdx]; // pointer to shifts doesnt work until matrix is flipped
+
         for(int nodeIndex=1; nodeIndex<cfg.idxNeighborsDenseLen; nodeIndex++) {
             neighborsIndexCounter++;
             // correlation=correlationsFrame(:,combination_ptr(1,neighborsIndexCounter));
             ippsCopy_32f(xcorrBuffer[cfg.combinationsPtr[0][neighborsIndexCounter]], correlation, xcorrLen);
-            
+
             if (cfg.combinationsPtr[1][neighborsIndexCounter] == -1) {
                 ippsFlip_32f_I(correlation, xcorrLen); // TODO: length ok?  why reverse vector?
             }
             // look for maximal value in the crosscorrelated IRs only in the relevant area
             // correlation = correlation(frame_length-maxShift(nodeIndex-1):frame_length+maxShift(nodeIndex-1));
-            int lagIdx = blocksize-maxShift[nodeIndex-1]; // TODO: why nodeindex-1?
+            uint8_t maxShift = cfg.maxShiftDense[nodeIndex-1][dirIdx];
+            int lagIdx = blocksize-maxShift;
             int maxPos;
-            int corrLen = 2*maxShift[nodeIndex-1]+1; // TODO: correct?
+            int corrLen = 2*maxShift+1; // TODO: correct?
             Ipp32f maxVal; // unused
             ippsMaxIndx_32f(&correlation[lagIdx], corrLen, &maxVal, &maxPos);
             currentTimeShift[nodeIndex] = (maxPos - (corrLen + 1) / 2);
-            timeShiftMean += currentTimeShift[nodeIndex] * cfg.weightsNeighborsDense[dirIdx][nodeIndex];
+            timeShiftMean += currentTimeShift[nodeIndex] * cfg.weightsNeighborsDense[nodeIndex][dirIdx];
         }
-        
-        // TODO: neighborsIRs = irsFrame(neighborsIndex,:); % get all next neighbor irs of one frame and perform windowing
-        // TODO: for each neighborIR
+
         // align every block according to the calculated time shift, weight and sum up
-        memset(denseBuffer[BufferNum][dirIdx], 0, blocksize);
         for (int nodeIndex=0; nodeIndex<cfg.numNeighborsDense[dirIdx]; nodeIndex++) {
             // currentBlock = neighborsIRs(nodeIndex, :) * weights(nodeIndex);
-            int idx = cfg.idxNeighborsDense[dirIdx][nodeIndex];
-            ippsMulC_32f(sparseBuffer[BufferNum][idx], cfg.weightsNeighborsDense[dirIdx][nodeIndex], currentBlock, blocksize);
+            int idx = cfg.idxNeighborsDense[nodeIndex][dirIdx];
+            ippsMulC_32f(sparseBuffer[BufferNum][idx], cfg.weightsNeighborsDense[nodeIndex][dirIdx], currentBlock, blocksize);
             int timeShiftFinal = round(-timeShiftMean + currentTimeShift[nodeIndex] + cfg.maxShiftOverall); // As maxShiftOverall is added, timeShiftFinal will always be positive
             timeShiftFinal = (timeShiftFinal < 0) ? 0: timeShiftFinal; // Added 22.12.2021 to assure that timeShiftFinal does not become negative
-            
+
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
-            ippsAdd_32f_I(currentBlock,  &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize-timeShiftFinal);
+            if (nodeIndex == 0)
+                ippsCopy_32f(currentBlock, denseBuffer[BufferNum][dirIdx], blocksize);
+            else
+                ippsAdd_32f_I(currentBlock,  &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize-timeShiftFinal);
         }
     }
 }
