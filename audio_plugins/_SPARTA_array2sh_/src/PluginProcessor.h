@@ -120,9 +120,6 @@ public:
     PluginProcessor();
     ~PluginProcessor();
 
-    // Process a SARITA frame
-    void processFrame (int samplesPerBlock, int numChannels);
-
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
     void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages) override;

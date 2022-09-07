@@ -331,7 +331,7 @@ int setupSarita(int blocksize, int numInputCount, int numOutputCount)
  * process all channels of a frame
  * read from input ringbuffer and write to denseBuffer
  */
-void PluginProcessor::processFrame (int blocksize, int numInputChannels)
+inline void processFrame (int blocksize, int numInputChannels)
 {
     // apply hann window
     for (int ch=0; ch<numInputChannels; ch++) {
@@ -398,7 +398,6 @@ void PluginProcessor::processFrame (int blocksize, int numInputChannels)
             ippsAdd_32f_I(currentBlock,  &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize-timeShiftFinal);
         }
     }
-    
 }
 
 
