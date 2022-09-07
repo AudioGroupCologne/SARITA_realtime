@@ -290,17 +290,7 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     nSampleRate = (int)(sampleRate + 0.5);
 
     // SARITA
-    setupSarita(nHostBlockSize);
-    
-    IppStatus stat;
-    // TODO: dstLen = maxhsift? 13 anstatt blocksize?
-    stat = ippsCrossCorrNormGetBufferSize(nHostBlockSize, nHostBlockSize, nHostBlockSize, 0, ipp32f, ippAlgAuto, &tmpXcorrBufferSize);
-    tmpXcorrBuffer = ippsMalloc_8u(tmpXcorrBufferSize);
-    correlation = ippsMalloc_32f(nHostBlockSize * 2);
-    tmpCorr = ippsMalloc_32f(2*cfg.maxShiftOverall);
-    
-    currentTimeShift = (int*)malloc(cfg.idxNeighborsDenseLen * sizeof(int)); // TODO: correct size?
-    currentBlock = ippsMalloc_32f(nHostBlockSize);
+    setupSarita(nHostBlockSize, nNumInputs, nNumOutputs);
     
 #ifdef TESTDATA
     flogger = std::unique_ptr<FileLogger>(FileLogger::createDateStampedLogger("Sarita", "log", ".txt", "Sarita Log"));
@@ -333,77 +323,6 @@ void PluginProcessor::releaseResources()
 {
 }
 
-void PluginProcessor::processFrame (int blocksize, int numChannels)
-{
-    // apply hann window
-    for (int ch=0; ch<numChannels; ch++) {
-        input->popWithOverlap(processingBuffer[BufferNum][ch], ch, blocksize, saritaOverlapSize);
-        ippsMul_32f_I(hannWin, processingBuffer[BufferNum][ch], blocksize);
-    }
-    
-    // in each frame the cross-correlation required for the upsampling are determined
-    uint8_t n1, n2;
-    for (int n=0; n<96; /*cfg.neighborCombLength;*/ n++) {
-        n1 = 0; //cfg.neighborCombinations[n][0];
-        n2 = 1; //cfg.neighborCombinations[n][1];
-        // cxcorr(processingBuffer[BufferNum][n1], processingBuffer[BufferNum][n2], xcorrBuffer[n], blocksize, blocksize); // cpu hog
-        // vDSP_conv(processingBuffer[BufferNum][n1], 1, processingBuffer[BufferNum][n2], 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
-        ippsCrossCorrNorm_32f(processingBuffer[BufferNum][n1], blocksize, processingBuffer[BufferNum][n2], blocksize, xcorrBuffer[n], blocksize, 0, ippAlgAuto, tmpXcorrBuffer); // performs best, switches to fft calc at higher block sizes
-        // TODO: norm ok? max lag? len of xcorr = 2*blocksize-1?
-    }
-
-    int neighborsIndexCounter=0; // Counter which entry in combination_ptr is to be assessed
-    for (int dirIdx=0; dirIdx<cfg.denseGridSize; dirIdx++) {
-        memset(currentTimeShift, 0, cfg.idxNeighborsDenseLen);
-        float timeShiftMean = 0;
-        // Get nearst neighbors, weights and maxShift for actual direction, can
-        // later be directly addressed in following lines if desired
-        // neighborsIndex = idx_neighbors_dense_grid(dirIndex,1:num_neighbors_dense_grid(dirIndex));
-//        uint8_t *neighborsIdx = cfg.idxNeighborsDense[dirIdx]; // pointer to e.g. 6 neighbor indices // TODO: flip matrix / x y umsortieren!
-        // weights = weights_neighbors_dense_grid(dirIndex,1:num_neighbors_dense_grid(dirIndex));
-//        float *weights = cfg.weightsNeighborsDense[dirIdx]; // pointer to weights
-        // maxShift = maxShift_dense(dirIndex,1:num_neighbors_dense_grid(dirIndex)-1);
-        uint8_t *maxShift = cfg.maxShiftDense[dirIdx]; // pointer to shifts
-        
-        for(int nodeIndex=1; nodeIndex<cfg.idxNeighborsDenseLen; nodeIndex++) {
-            neighborsIndexCounter++;
-            // correlation=correlationsFrame(:,combination_ptr(1,neighborsIndexCounter));
-            correlation = xcorrBuffer[cfg.combinationsPtr[0][neighborsIndexCounter]];
-            if (cfg.combinationsPtr[1][neighborsIndexCounter] == -1) {
-                ippsFlip_32f_I(correlation, blocksize*2-1); // TODO: length ok?  why reverse vector?
-            }
-            // look for maximal value in the crosscorrelated IRs only in the relevant area
-            // correlation = correlation(frame_length-maxShift(nodeIndex-1):frame_length+maxShift(nodeIndex-1));
-            int lagIdx = blocksize-maxShift[nodeIndex-1]; // TODO: why nodeindex-1?
-            int maxPos;
-            int corrLen = 2*maxShift[nodeIndex-1]+1; // TODO: correct?
-            Ipp32f maxVal;
-            ippsMaxIndx_32f(&correlation[lagIdx], corrLen, &maxVal, &maxPos);
-            currentTimeShift[nodeIndex] = (maxPos - (corrLen + 1) / 2);
-            timeShiftMean += currentTimeShift[nodeIndex] * cfg.weightsNeighborsDense[dirIdx][nodeIndex];
-        }
-        
-        // TODO: neighborsIRs = irsFrame(neighborsIndex,:); % get all next neighbor irs of one frame and perform windowing
-        // TODO: for each neighborIR
-        // align every block according to the calculated time shift, weight and sum up
-        for (int nodeIndex=0; nodeIndex<cfg.numNeighborsDense[dirIdx]; nodeIndex++) {
-            // currentBlock = neighborsIRs(nodeIndex, :) * weights(nodeIndex);
-            int idx = cfg.idxNeighborsDense[dirIdx][nodeIndex];
-            ippsMulC_32f(processingBuffer[BufferNum][idx], cfg.weightsNeighborsDense[dirIdx][nodeIndex], currentBlock, blocksize);
-            int timeShiftFinal = round(-timeShiftMean + currentTimeShift[nodeIndex] + cfg.maxShiftOverall); // As maxShiftOverall is added, timeShiftFinal will always be positive
-            timeShiftFinal = (timeShiftFinal < 0) ? 0: timeShiftFinal; // Added 22.12.2021 to assure that timeShiftFinal does not become negative
-            
-            //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
-            //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
-            
-            // TODO: damn timeshift in output buffer
-            // TODO: upsampledBuffer[dirIdx][]
-        }
-    }
-    
-}
-
-
 void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*midiMessages*/)
 {
     int nCurrentBlockSize = nHostBlockSize = buffer.getNumSamples();
@@ -414,84 +333,90 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
 //    int frameSize = array2sh_getFrameSize();
 //    float* saritaFrameData[SARITA_DENSESAMPLINGPOINTS];
     
-    // fill input ring buffer
-    for (int ch = 0; ch < nNumInputs; ch++) {
-        auto* channelData = buffer.getReadPointer(ch);
-        input->push(channelData, nCurrentBlockSize, ch);
-//        input->push(&testData[testcount*nCurrentBlockSize], nCurrentBlockSize, ch);
-    }
-#ifdef TESTDATA
-    flogger->logMessage("fill w" + String(input->getWriteIdx()) + " buf" + String(input->bufferedBytes));
-    testcount++;
-    testcount %= 4;
-#endif
-
-    // process frame when frame size fulfilled
-    while (input->bufferedBytes >= nCurrentBlockSize) { // TODO: independent buffer size
-        // process frame for all channels
-        processFrame(nCurrentBlockSize, nNumOutputs); // TODO: channel num
-
-#ifdef TESTDATA
-        flogger->logMessage("popd r" + String(input->getReadIdx()) + " buf" + String(input->bufferedBytes));
-        String tes = "Frame: " + String(saritaFrame) + "\n";
-        for (int i=0; i<nCurrentBlockSize; i++)
-            tes += String(processingBuffer[!saritaFrame][0][i])  + ", ";
-        tes += "\n=====";
-        flogger->logMessage(tes);
-#endif
-        
-        // add overlapping part of current frame to last frame end
-        for (int ch=0; ch<nNumOutputs; ch++) {
-            int overlapIdx = nCurrentBlockSize-saritaOverlapSize;
-            utility_svvadd(&processingBuffer[BufferNum][ch][0], &processingBuffer[!BufferNum][ch][overlapIdx], saritaOverlapSize, outputBuffer[BufferNum][ch]);
-        }
-    
-        // copy last overlap to output ring buffer
-        for (int ch=0; ch<nNumOutputs; ch++) {
-            output->push(outputBuffer[BufferNum][ch], saritaOverlapSize, ch);
-        }
-        // copy non overlapping part to output ring buffer
-        for (int ch=0; ch<nNumOutputs; ch++) {
-            output->push(&processingBuffer[BufferNum][ch][saritaOverlapSize], nCurrentBlockSize-2*saritaOverlapSize, ch);
-        }
-        BufferNum ^= 1; // swap buffer
-    }
-    
-    // test output
-    if (output->bufferedBytes >= nCurrentBlockSize) {
-        for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
-            float* channelData = buffer.getWritePointer(ch);
-            output->pop(channelData, ch, nCurrentBlockSize);
-#ifdef TESTDATA
-            if (ch==0) {
-                String tes = "Frame: " + String(saritaFrame) + "\n";
-                for (int i=0; i<nCurrentBlockSize; i++)
-                    tes += String(channelData[i])  + ", ";
-                tes += "\n=====";
-                flogger->logMessage(tes);
-            }
-#endif
-        }
-    }
-    else {
-#ifdef TESTDATA
-        flogger->logMessage("empty r " + String(output->getReadIdx()) + " w " + String(output->getWriteIdx()) + " buf " + String(output->bufferedBytes));
-#endif
+    // if config file read is not successful
+    if (configError)
         buffer.clear();
+    else
+    {
+        // fill input ring buffer
+        for (int ch = 0; ch < nNumInputs; ch++) {
+            auto* channelData = buffer.getReadPointer(ch);
+            input->push(channelData, nCurrentBlockSize, ch);
+            // input->push(&testData[testcount*nCurrentBlockSize], nCurrentBlockSize, ch);
+        }
+    #ifdef TESTDATA
+        flogger->logMessage("fill w" + String(input->getWriteIdx()) + " buf" + String(input->bufferedBytes));
+        testcount++;
+        testcount %= 4;
+    #endif
+
+        // process frame when frame size fulfilled
+        while (input->bufferedBytes >= nCurrentBlockSize) { // TODO: independent buffer size
+            // process frame for all channels
+            processFrame(nCurrentBlockSize, nNumOutputs); // TODO: channel num
+
+    #ifdef TESTDATA
+            flogger->logMessage("popd r" + String(input->getReadIdx()) + " buf" + String(input->bufferedBytes));
+            String tes = "Frame: " + String(saritaFrame) + "\n";
+            for (int i=0; i<nCurrentBlockSize; i++)
+                tes += String(sparseBuffer[!saritaFrame][0][i])  + ", ";
+            tes += "\n=====";
+            flogger->logMessage(tes);
+    #endif
+            
+            // add overlapping part of current frame to last frame end
+            for (int ch=0; ch<nNumOutputs; ch++) {
+                int overlapIdx = nCurrentBlockSize-saritaOverlapSize;
+                utility_svvadd(&denseBuffer[BufferNum][ch][0], &denseBuffer[!BufferNum][ch][overlapIdx], saritaOverlapSize, outputBuffer[BufferNum][ch]);
+            }
+        
+            // copy last overlap to output ring buffer
+            for (int ch=0; ch<nNumOutputs; ch++) {
+                output->push(outputBuffer[BufferNum][ch], saritaOverlapSize, ch);
+            }
+            // copy non overlapping part to output ring buffer
+            for (int ch=0; ch<nNumOutputs; ch++) {
+                output->push(&denseBuffer[BufferNum][ch][saritaOverlapSize], nCurrentBlockSize-2*saritaOverlapSize, ch);
+            }
+            BufferNum ^= 1; // swap buffer
+        }
+        
+        // test output
+        if (output->bufferedBytes >= nCurrentBlockSize) {
+            for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
+                float* channelData = buffer.getWritePointer(ch);
+                output->pop(channelData, ch, nCurrentBlockSize);
+    #ifdef TESTDATA
+                if (ch==0) {
+                    String tes = "Frame: " + String(saritaFrame) + "\n";
+                    for (int i=0; i<nCurrentBlockSize; i++)
+                        tes += String(channelData[i])  + ", ";
+                    tes += "\n=====";
+                    flogger->logMessage(tes);
+                }
+    #endif
+            }
+        }
+        else {
+    #ifdef TESTDATA
+            flogger->logMessage("empty r " + String(output->getReadIdx()) + " w " + String(output->getWriteIdx()) + " buf " + String(output->bufferedBytes));
+    #endif
+            buffer.clear();
+        }
+        /*
+         * process array2sh with dense grid
+         */
+    //    if((nCurrentBlockSize % frameSize == 0)){ /* divisible by frame size */
+    //        for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
+    //            for (int ch = 0; ch < buffer.getNumChannels(); ch++)
+    //                pFrameData[ch] = &bufferData[ch][frame*frameSize];
+    //            /* perform processing */
+    //            array2sh_process(hA2sh, pFrameData, pFrameData, nNumInputs, nNumOutputs, frameSize);
+    //        }
+    //    }
+    //    else
+    //        buffer.clear();
     }
-    /*
-     * process array2sh with dense grid
-     */
-//    if((nCurrentBlockSize % frameSize == 0)){ /* divisible by frame size */
-//        for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
-//            for (int ch = 0; ch < buffer.getNumChannels(); ch++)
-//                pFrameData[ch] = &bufferData[ch][frame*frameSize];
-//            /* perform processing */
-//            array2sh_process(hA2sh, pFrameData, pFrameData, nNumInputs, nNumOutputs, frameSize);
-//        }
-//    }
-//    else
-//        buffer.clear();
 }
 
 //==============================================================================
