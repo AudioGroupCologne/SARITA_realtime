@@ -167,6 +167,8 @@ Ipp32f *hannWin;
 int* currentTimeShift;
 Ipp32f* currentBlock;
 
+float** outData;
+
 bool configError = true;
 
 // config data
@@ -323,6 +325,8 @@ int setupSarita(int blocksize, int numInputCount, int numOutputCount)
     denseBuffer = (float***)calloc3d(2, cfg.denseGridSize, blocksize, sizeof(float));
     outputBuffer = (float***)calloc3d(2, cfg.denseGridSize, blocksize, sizeof(float));
     xcorrBuffer = (float**)calloc2d(cfg.neighborCombLength, xcorrLen, sizeof(float));
+    
+    outData = (float**)calloc2d(cfg.denseGridSize, blocksize, sizeof(float));
     
     input = new RingBuffer(numInputCount, saritaBufferSize);
     output = new RingBuffer(numOutputCount, saritaBufferSize);

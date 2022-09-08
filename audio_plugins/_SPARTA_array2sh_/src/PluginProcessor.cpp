@@ -328,10 +328,10 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
     int nCurrentBlockSize = nHostBlockSize = buffer.getNumSamples();
     nNumInputs = jmin(getTotalNumInputChannels(), buffer.getNumChannels());
     nNumOutputs = jmin(getTotalNumOutputChannels(), buffer.getNumChannels());
-//    float** bufferData = buffer.getArrayOfWritePointers();
-//    float* pFrameData[MAX_NUM_CHANNELS];
-//    int frameSize = array2sh_getFrameSize();
-//    float* saritaFrameData[SARITA_DENSESAMPLINGPOINTS];
+
+    float** bufferData = buffer.getArrayOfWritePointers();
+    float* pFrameData[MAX_NUM_CHANNELS];
+    int frameSize = array2sh_getFrameSize();
     
     // if config file read is not successful
     if (configError)
@@ -382,40 +382,42 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         }
         
         // test output
-        if (output->bufferedBytes >= nCurrentBlockSize) {
-            for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
-                float* channelData = buffer.getWritePointer(ch);
-                output->pop(channelData, ch, nCurrentBlockSize);
-    #ifdef TESTDATA
-                if (ch==0) {
-                    String tes = "Frame: " + String(saritaFrame) + "\n";
-                    for (int i=0; i<nCurrentBlockSize; i++)
-                        tes += String(channelData[i])  + ", ";
-                    tes += "\n=====";
-                    flogger->logMessage(tes);
-                }
-    #endif
-            }
-        }
-        else {
-    #ifdef TESTDATA
-            flogger->logMessage("empty r " + String(output->getReadIdx()) + " w " + String(output->getWriteIdx()) + " buf " + String(output->bufferedBytes));
-    #endif
-            buffer.clear();
-        }
+//        if (output->bufferedBytes >= nCurrentBlockSize) {
+//            for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
+//                float* channelData = buffer.getWritePointer(ch);
+//                output->pop(channelData, ch, nCurrentBlockSize);
+//    #ifdef TESTDATA
+//                if (ch==0) {
+//                    String tes = "Frame: " + String(saritaFrame) + "\n";
+//                    for (int i=0; i<nCurrentBlockSize; i++)
+//                        tes += String(channelData[i])  + ", ";
+//                    tes += "\n=====";
+//                    flogger->logMessage(tes);
+//                }
+//    #endif
+//            }
+//        }
+//        else {
+//    #ifdef TESTDATA
+//            flogger->logMessage("empty r " + String(output->getReadIdx()) + " w " + String(output->getWriteIdx()) + " buf " + String(output->bufferedBytes));
+//    #endif
+//            buffer.clear();
+//        }
         /*
          * process array2sh with dense grid
          */
-    //    if((nCurrentBlockSize % frameSize == 0)){ /* divisible by frame size */
-    //        for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
-    //            for (int ch = 0; ch < buffer.getNumChannels(); ch++)
-    //                pFrameData[ch] = &bufferData[ch][frame*frameSize];
-    //            /* perform processing */
-    //            array2sh_process(hA2sh, pFrameData, pFrameData, nNumInputs, nNumOutputs, frameSize);
-    //        }
-    //    }
-    //    else
-    //        buffer.clear();
+        if ((output->bufferedBytes >= nCurrentBlockSize) && (nCurrentBlockSize % frameSize == 0)) { /* buffer filled and blocksize divisible by frame size */
+            for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
+                for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
+                    // copy to array2Sh processing buffer
+                    output->pop(outData[ch], ch, frameSize);
+                }
+                /* perform processing */
+                array2sh_process(hA2sh, outData, bufferData, nNumOutputs, nNumOutputs, frameSize);
+            }
+        }
+        else
+            buffer.clear();
     }
 }
 
