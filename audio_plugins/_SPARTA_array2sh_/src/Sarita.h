@@ -34,11 +34,8 @@
 #include "ipp.h"
 #include "saf.h"           /* Main include header for SAF */
 
-//#define SARITA_FRAMESIZE 4096
-#define SARITA_OVERLAP 0.25 // 50% = 2048, 25% = 1024 @ 4096 Framesize
+#define TEST_AUDIO_OUTPUT
 
-//#define TESTDATA
-int testcount = 0;
 std::unique_ptr<FileLogger> flogger;
 
 /*
@@ -69,6 +66,11 @@ public:
         return bufferedBytes >= size;
     }
     
+    void reset() {
+        readIdx = writeIdx = 0;
+        bufferedBytes = 0;
+    }
+    
     
     RingBuffer(int channels, int bufferSize)
     {
@@ -86,8 +88,9 @@ public:
     
     void push(const float* input, int len, int ch)
     {
-         assert(len <= capacity());
+//         assert(len <= capacity());
          assert(!full());
+         assert(len > 0);
             if (size - writeIdx >= len) { // copy buffer to ringbuffer without wrap around
                 utility_svvcopy(input, len, &data[ch][writeIdx]);
             }
@@ -154,9 +157,8 @@ float*** outputBuffer;
 int saritaBufferSize = 0;
 int saritaOverlapSize;
 int BufferNum = 0; // double buffer 0/1
-int outputGridLen = 64;
 
-// cross corretlation buffers
+// cross correlation buffers
 int xcorrLen;
 int tmpXcorrBufferSize;
 Ipp8u* tmpXcorrBuffer;
@@ -171,7 +173,9 @@ float** outData;
 
 bool configError = true;
 
-// config data
+/*
+ * config data struct from MATLAB
+ */
 struct SaritaConfig {
     // header
 //    int N;                 // order of source grid
@@ -193,23 +197,6 @@ struct SaritaConfig {
     uint8_t** maxShiftDense;
     int8_t** combinationsPtr;       // Array describing which neighbors combination is required for each cross correlations
 } cfg;
-
-/*
- *  custom window: window ramp up and down only in overlapping parts
- */
-inline void saritaWin(int len, int overlap)
-{
-    hannWin = (float*) malloc(len * sizeof(float));
-    float *tmpWin = (float*) malloc(overlap*2 * sizeof(float));
-
-    // ippsSet_32f & ippsWinHann_32f_I was added to custom saf ipp list!
-    ippsSet_32f(1, tmpWin, overlap*2);
-    ippsWinHann_32f_I(tmpWin, overlap*2);
-    
-    ippsSet_32f(1, hannWin, len);
-    ippsCopy_32f(tmpWin, hannWin, overlap); // ramp up
-    ippsCopy_32f(&tmpWin[overlap], &hannWin[len-overlap], overlap); // ramp down
-}
 
 /*
 * binary file read helpers
@@ -297,11 +284,29 @@ inline int saritaReadConfigFile(const char* path)
 }
 
 
+/*
+ *  custom window: window ramp up and down only in overlapping parts
+ */
+inline void saritaWin(int len, int overlap)
+{
+    hannWin = (float*) malloc(len * sizeof(float));
+    float *tmpWin = (float*) malloc(overlap*2 * sizeof(float));
+
+    // ippsSet_32f & ippsWinHann_32f_I was added to custom saf ipp list!
+    ippsSet_32f(1, tmpWin, overlap*2);
+    ippsWinHann_32f_I(tmpWin, overlap*2);
+    
+    ippsSet_32f(1, hannWin, len);
+    ippsCopy_32f(tmpWin, hannWin, overlap); // ramp up
+    ippsCopy_32f(&tmpWin[overlap], &hannWin[len-overlap], overlap); // ramp down
+}
+
+
 int setupSarita(int blocksize, int numInputCount, int numOutputCount)
 {
     configError = true;
     
-    // FIXME: move to better location. currently "~/Documents/GitHub/config.dat" };
+    // FIXME: move to better location. currently "~/Documents/GitHub/SariteConfig.dat" };
     juce::File f = juce::File::getSpecialLocation(File::userDocumentsDirectory).getChildFile("GitHub").getChildFile("SaritaConfig.dat");
     if (!f.existsAsFile())
         return -1;
@@ -311,22 +316,23 @@ int setupSarita(int blocksize, int numInputCount, int numOutputCount)
         return -1;
     
     saritaBufferSize = 2*blocksize; //  (2 - SARITA_OVERLAP)*blockSize;
-    saritaOverlapSize = SARITA_OVERLAP*blocksize;
+    saritaOverlapSize = (int)blocksize / cfg.overlapInv;
     saritaWin(blocksize, saritaOverlapSize);
     
     // allocate buffers
     xcorrLen = 2*blocksize-1;
     IppStatus stat;
-    stat = ippsCrossCorrNormGetBufferSize(blocksize, blocksize, xcorrLen, 0, ipp32f, ippAlgAuto, &tmpXcorrBufferSize);
+    IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
+    stat = ippsCrossCorrNormGetBufferSize(blocksize, blocksize, xcorrLen, -blocksize-1, ipp32f, funCfgNormNo, &tmpXcorrBufferSize);
     tmpXcorrBuffer = ippsMalloc_8u(tmpXcorrBufferSize);
     correlation = ippsMalloc_32f(blocksize * 2);
     
-    sparseBuffer = (float***)calloc3d(2, 64, blocksize, sizeof(float));
-    denseBuffer = (float***)calloc3d(2, cfg.denseGridSize, blocksize, sizeof(float));
-    outputBuffer = (float***)calloc3d(2, cfg.denseGridSize, blocksize, sizeof(float));
+    sparseBuffer = (float***)calloc3d(2, numInputCount/*cfg.denseGridSize*/, blocksize, sizeof(float));
+    denseBuffer = (float***)calloc3d(2,  numInputCount/*cfg.denseGridSize*/, blocksize, sizeof(float));
+    outputBuffer = (float***)calloc3d(2,  numInputCount/*cfg.denseGridSize*/, blocksize, sizeof(float));
     xcorrBuffer = (float**)calloc2d(cfg.neighborCombLength, xcorrLen, sizeof(float));
     
-    outData = (float**)calloc2d(cfg.denseGridSize, blocksize, sizeof(float));
+    outData = (float**)calloc2d( numInputCount/*cfg.denseGridSize*/, blocksize, sizeof(float));
     
     input = new RingBuffer(numInputCount, saritaBufferSize);
     output = new RingBuffer(numOutputCount, saritaBufferSize);
@@ -360,38 +366,37 @@ inline void processFrame (int blocksize, int numInputChannels)
         n2 = n2 > 63? 63 : n2;
         // cxcorr(processingBuffer[BufferNum][n1], processingBuffer[BufferNum][n2], xcorrBuffer[n], blocksize, blocksize); // cpu hog
         // vDSP_conv(processingBuffer[BufferNum][n1], 1, processingBuffer[BufferNum][n2], 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
-        ippsCrossCorrNorm_32f(sparseBuffer[0][n1], blocksize, sparseBuffer[0][n2], blocksize, xcorrBuffer[n], xcorrLen, 0, ippAlgAuto, tmpXcorrBuffer); // performs best, switches to fft calc at higher block sizes
-        // TODO: norm ok? max lag? len of xcorr = 2*blocksize-1?
+        IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
+
+        // ipp correlates the reverse way compared to Matlab
+        ippsCrossCorrNorm_32f(sparseBuffer[0][n2], blocksize, sparseBuffer[0][n1], blocksize, xcorrBuffer[n], xcorrLen, -blocksize+1, funCfgNormNo, tmpXcorrBuffer); // performs best, switches to fft calc at higher block sizes
     }
 
     int neighborsIndexCounter=0; // Counter which entry in combination_ptr is to be assessed
     for (int dirIdx=0; dirIdx<cfg.denseGridSize; dirIdx++) {
-        memset(currentTimeShift, 0, cfg.idxNeighborsDenseLen);
+        currentTimeShift[0] = 0;
         float timeShiftMean = 0;
         
         int numNeighbors = cfg.numNeighborsDense[dirIdx];
         for(int nodeIndex=1; nodeIndex<numNeighbors; nodeIndex++) {
             // correlation=correlationsFrame(:,combination_ptr(1,neighborsIndexCounter));
             int x = cfg.combinationsPtr[neighborsIndexCounter][0] - 1;
-            if (x < 0) {
-                DBG(x);
-            }
             ippsCopy_32f(xcorrBuffer[x], correlation, xcorrLen);
 
             if (cfg.combinationsPtr[neighborsIndexCounter][1] == -1) {
-                ippsFlip_32f_I(correlation, xcorrLen); // TODO: length ok?  why reverse vector?
+                ippsFlip_32f_I(correlation, xcorrLen);
             }
             neighborsIndexCounter++;
             
             // look for maximal value in the crosscorrelated IRs only in the relevant area
             // correlation = correlation(frame_length-maxShift(nodeIndex-1):frame_length+maxShift(nodeIndex-1));
             uint8_t maxShift = cfg.maxShiftDense[nodeIndex-1][dirIdx];
-            int lagIdx = blocksize-maxShift;
+            int lowestLagIdx = blocksize-maxShift;
             int maxPos;
-            int corrLen = 2*maxShift+1; // TODO: correct?
+            int shiftLen = 2*maxShift+1; // TODO: correct?
             Ipp32f maxVal; // unused
-            ippsMaxIndx_32f(&correlation[lagIdx], corrLen, &maxVal, &maxPos);
-            currentTimeShift[nodeIndex] = (maxPos - (corrLen + 1) / 2);
+            ippsMaxIndx_32f(&correlation[lowestLagIdx], shiftLen, &maxVal, &maxPos);
+            currentTimeShift[nodeIndex] = (maxPos - (shiftLen + 1) / 2);
             timeShiftMean += currentTimeShift[nodeIndex] * cfg.weightsNeighborsDense[nodeIndex][dirIdx];
         }
 
@@ -407,10 +412,12 @@ inline void processFrame (int blocksize, int numInputChannels)
             
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
-            if (nodeIndex == 0)
+            if (nodeIndex == 0) {
+                ippsZero_32f(denseBuffer[BufferNum][dirIdx], timeShiftFinal);
                 ippsCopy_32f(currentBlock, &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize-timeShiftFinal);
+            }
             else
-                ippsAdd_32f_I(currentBlock,  &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize-timeShiftFinal);
+                ippsAdd_32f_I(currentBlock, &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize-timeShiftFinal);
         }
     }
 }

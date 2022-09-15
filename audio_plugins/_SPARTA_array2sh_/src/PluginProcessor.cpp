@@ -25,8 +25,8 @@
 
 PluginProcessor::PluginProcessor() :
 	AudioProcessor(BusesProperties()
-		.withInput("Input", AudioChannelSet::discreteChannels(2), true)
-	    .withOutput("Output", AudioChannelSet::discreteChannels(2), true))
+		.withInput("Input", AudioChannelSet::discreteChannels(64), true)
+	    .withOutput("Output", AudioChannelSet::discreteChannels(64), true))
 {
 	array2sh_create(&hA2sh);
     startTimer(TIMER_PROCESSING_RELATED, 80);
@@ -286,37 +286,15 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     nHostBlockSize = samplesPerBlock;
     nNumInputs =  getTotalNumInputChannels();
-    nNumOutputs = getTotalNumOutputChannels();
+    nNumOutputs =  getTotalNumOutputChannels();
     nSampleRate = (int)(sampleRate + 0.5);
 
     // SARITA
     setupSarita(nHostBlockSize, nNumInputs, nNumOutputs);
     
-#ifdef TESTDATA
-    flogger = std::unique_ptr<FileLogger>(FileLogger::createDateStampedLogger("Sarita", "log", ".txt", "Sarita Log"));
-    
-    for (int i=0; i<nHostBlockSize; i++) {
-        testData[i] = 1.f;
-    }
-    for (int i=1*nHostBlockSize; i<2*nHostBlockSize; i++) {
-        testData[i] = 2.f;
-    }
-    for (int i=2*nHostBlockSize; i<3*nHostBlockSize; i++) {
-        testData[i] = 3.f;
-    }
-    for (int i=3*nHostBlockSize; i<4*nHostBlockSize; i++) {
-        testData[i] = 4.f;
-    }
-//    String tes = "Data: ";
-//    for (int i=0; i<4*nHostBlockSize; i++)
-//        tes += String(testData[i]) + ", ";
-//    tes += "\n=====";
-//    flogger->logMessage(tes);
-    testcount = 0;
-#endif
-    
     array2sh_init(hA2sh, nSampleRate);
-    AudioProcessor::setLatencySamples(array2sh_getProcessingDelay());
+//    AudioProcessor::setLatencySamples(array2sh_getProcessingDelay());
+    AudioProcessor::setLatencySamples(nHostBlockSize + cfg.maxShiftOverall); // TODO: add array2sh_getProcessingDelay()?
 }
 
 void PluginProcessor::releaseResources()
@@ -325,13 +303,13 @@ void PluginProcessor::releaseResources()
 
 void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*midiMessages*/)
 {
-    int nCurrentBlockSize = nHostBlockSize = buffer.getNumSamples();
+    int nCurrentBlockSize = buffer.getNumSamples();
     nNumInputs = jmin(getTotalNumInputChannels(), buffer.getNumChannels());
     nNumOutputs = jmin(getTotalNumOutputChannels(), buffer.getNumChannels());
 
-    float** bufferData = buffer.getArrayOfWritePointers();
-    float* pFrameData[MAX_NUM_CHANNELS];
-    int frameSize = array2sh_getFrameSize();
+//    float** bufferData = buffer.getArrayOfWritePointers();
+//    float* pFrameData[MAX_NUM_CHANNELS];
+//    int frameSize = array2sh_getFrameSize();
     
     // if config file read is not successful
     if (configError)
@@ -342,28 +320,13 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         for (int ch = 0; ch < nNumInputs; ch++) {
             auto* channelData = buffer.getReadPointer(ch);
             input->push(channelData, nCurrentBlockSize, ch);
-            // input->push(&testData[testcount*nCurrentBlockSize], nCurrentBlockSize, ch);
         }
-    #ifdef TESTDATA
-        flogger->logMessage("fill w" + String(input->getWriteIdx()) + " buf" + String(input->bufferedBytes));
-        testcount++;
-        testcount %= 4;
-    #endif
 
         // process frame when frame size fulfilled
-        while (input->bufferedBytes >= nCurrentBlockSize) { // TODO: independent buffer size
+        while (input->bufferedBytes >= nHostBlockSize) { // TODO: independent buffer size
             // process frame for all channels
-            processFrame(nCurrentBlockSize, nNumOutputs); // TODO: channel num
+            processFrame(nHostBlockSize, nNumOutputs); // TODO: channel num
 
-    #ifdef TESTDATA
-            flogger->logMessage("popd r" + String(input->getReadIdx()) + " buf" + String(input->bufferedBytes));
-            String tes = "Frame: " + String(saritaFrame) + "\n";
-            for (int i=0; i<nCurrentBlockSize; i++)
-                tes += String(sparseBuffer[!saritaFrame][0][i])  + ", ";
-            tes += "\n=====";
-            flogger->logMessage(tes);
-    #endif
-            
             // add overlapping part of current frame to last frame end
             for (int ch=0; ch<nNumOutputs; ch++) {
                 int overlapIdx = nCurrentBlockSize-saritaOverlapSize;
@@ -376,37 +339,24 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
             }
             // copy non overlapping part to output ring buffer
             for (int ch=0; ch<nNumOutputs; ch++) {
-                output->push(&denseBuffer[BufferNum][ch][saritaOverlapSize], nCurrentBlockSize-2*saritaOverlapSize, ch);
+                output->push(&denseBuffer[BufferNum][ch][saritaOverlapSize], nHostBlockSize-2*saritaOverlapSize, ch);
             }
             BufferNum ^= 1; // swap buffer
         }
         
         // test output
-//        if (output->bufferedBytes >= nCurrentBlockSize) {
-//            for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
-//                float* channelData = buffer.getWritePointer(ch);
-//                output->pop(channelData, ch, nCurrentBlockSize);
-//    #ifdef TESTDATA
-//                if (ch==0) {
-//                    String tes = "Frame: " + String(saritaFrame) + "\n";
-//                    for (int i=0; i<nCurrentBlockSize; i++)
-//                        tes += String(channelData[i])  + ", ";
-//                    tes += "\n=====";
-//                    flogger->logMessage(tes);
-//                }
-//    #endif
-//            }
-//        }
-//        else {
-//    #ifdef TESTDATA
-//            flogger->logMessage("empty r " + String(output->getReadIdx()) + " w " + String(output->getWriteIdx()) + " buf " + String(output->bufferedBytes));
-//    #endif
-//            buffer.clear();
-//        }
+#ifdef TEST_AUDIO_OUTPUT
+        if (output->bufferedBytes >= nHostBlockSize) {
+            for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
+                float* channelData = buffer.getWritePointer(ch);
+                output->pop(channelData, ch, nHostBlockSize);
+            }
+        }
+#else
         /*
          * process array2sh with dense grid
          */
-        if ((output->bufferedBytes >= nCurrentBlockSize) && (nCurrentBlockSize % frameSize == 0)) { /* buffer filled and blocksize divisible by frame size */
+        if ((output->bufferedBytes >= nHostBlockSize) && (nHostBlockSize % frameSize == 0)) { /* buffer filled and blocksize divisible by frame size */
             for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
                 for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
                     // copy to array2Sh processing buffer
@@ -416,8 +366,10 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
                 array2sh_process(hA2sh, outData, bufferData, nNumOutputs, nNumOutputs, frameSize);
             }
         }
-        else
+#endif
+        else {
             buffer.clear();
+        }
     }
 }
 
