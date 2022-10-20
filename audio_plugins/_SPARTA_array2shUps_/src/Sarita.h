@@ -34,7 +34,7 @@
 #include "ipp.h"
 #include "saf.h"           /* Main include header for SAF */
 
-#define TEST_AUDIO_OUTPUT
+//#define TEST_AUDIO_OUTPUT
 
 std::unique_ptr<FileLogger> flogger;
 
@@ -280,6 +280,12 @@ inline int saritaReadConfigFile(const char* path)
     cfg.combinationsPtr = (int8_t**)calloc2d(cfg.combinationsPtrLen, 2, sizeof(int8_t));
     result = readArrayUint8(configFile, (uint8_t**)cfg.combinationsPtr, cfg.combinationsPtrLen, 2);
 
+//    auto jsonString = JSON::toString(cfg.fs);
+//    juce::File jFile = juce::File::getSpecialLocation(File::userDocumentsDirectory).getChildFile("SaritaConfig.json");
+//    JSON::writeToStream(cfg);
+//    jFile.create();
+//    jFile.replaceWithText (jsonString);
+    
     return result;
 }
 
@@ -307,7 +313,7 @@ int setupSarita(int blocksize, int numInputCount, int numOutputCount)
     configError = true;
     
     // FIXME: move to better location. currently "~/Documents/GitHub/SariteConfig.dat" };
-    juce::File f = juce::File::getSpecialLocation(File::userDocumentsDirectory).getChildFile("GitHub").getChildFile("SaritaConfig.dat");
+    juce::File f = juce::File::getSpecialLocation(File::userDocumentsDirectory).getChildFile("SaritaConfig.dat");
     if (!f.existsAsFile())
         return -1;
     

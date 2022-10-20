@@ -307,9 +307,9 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
     nNumInputs = jmin(getTotalNumInputChannels(), buffer.getNumChannels());
     nNumOutputs = jmin(getTotalNumOutputChannels(), buffer.getNumChannels());
 
-//    float** bufferData = buffer.getArrayOfWritePointers();
+    float** bufferData = buffer.getArrayOfWritePointers();
 //    float* pFrameData[MAX_NUM_CHANNELS];
-//    int frameSize = array2sh_getFrameSize();
+    int frameSize = array2sh_getFrameSize();
     
     // if config file read is not successful
     if (configError)

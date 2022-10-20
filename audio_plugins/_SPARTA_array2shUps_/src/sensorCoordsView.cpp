@@ -7,12 +7,12 @@
   the "//[xyz]" and "//[/xyz]" sections will be retained when the file is loaded
   and re-saved.
 
-  Created with Projucer version: 6.0.3
+  Created with Projucer version: 5.4.4
 
   ------------------------------------------------------------------------------
 
   The Projucer is part of the JUCE library.
-  Copyright (c) 2020 - Raw Material Software Limited.
+  Copyright (c) 2017 - ROLI Ltd.
 
   ==============================================================================
 */
@@ -35,11 +35,11 @@ sensorCoordsView::sensorCoordsView (PluginProcessor* ownerFilter, int _maxQ, int
     //[Constructor_pre] You can add your own custom stuff here..
     //[/Constructor_pre]
 
-    dummySlider.reset (new juce::Slider ("new slider"));
+    dummySlider.reset (new Slider ("new slider"));
     addAndMakeVisible (dummySlider.get());
     dummySlider->setRange (0.01, 0.3, 0.001);
-    dummySlider->setSliderStyle (juce::Slider::LinearHorizontal);
-    dummySlider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 20);
+    dummySlider->setSliderStyle (Slider::LinearHorizontal);
+    dummySlider->setTextBoxStyle (Slider::TextBoxRight, false, 70, 20);
     dummySlider->addListener (this);
 
     dummySlider->setBounds (-176, 144, 96, 16);
@@ -120,38 +120,38 @@ sensorCoordsView::~sensorCoordsView()
 }
 
 //==============================================================================
-void sensorCoordsView::paint (juce::Graphics& g)
+void sensorCoordsView::paint (Graphics& g)
 {
     //[UserPrePaint] Add your own custom painting code here..
     //[/UserPrePaint]
 
     {
         int x = 88, y = 0, width = 88, height = 2048;
-        juce::Colour fillColour1 = juce::Colour (0x21ffffff), fillColour2 = juce::Colour (0x05252a25);
+        Colour fillColour1 = Colour (0x21ffffff), fillColour2 = Colour (0x05252a25);
         //[UserPaintCustomArguments] Customize the painting arguments here..
         //[/UserPaintCustomArguments]
-        g.setGradientFill (juce::ColourGradient (fillColour1,
-                                             88.0f - 88.0f + x,
-                                             128.0f - 0.0f + y,
-                                             fillColour2,
-                                             176.0f - 88.0f + x,
-                                             128.0f - 0.0f + y,
-                                             false));
+        g.setGradientFill (ColourGradient (fillColour1,
+                                       88.0f - 88.0f + x,
+                                       128.0f - 0.0f + y,
+                                       fillColour2,
+                                       176.0f - 88.0f + x,
+                                       128.0f - 0.0f + y,
+                                       false));
         g.fillRect (x, y, width, height);
     }
 
     {
         int x = 0, y = 0, width = 88, height = 2048;
-        juce::Colour fillColour1 = juce::Colour (0x21ffffff), fillColour2 = juce::Colour (0x05252a25);
+        Colour fillColour1 = Colour (0x21ffffff), fillColour2 = Colour (0x05252a25);
         //[UserPaintCustomArguments] Customize the painting arguments here..
         //[/UserPaintCustomArguments]
-        g.setGradientFill (juce::ColourGradient (fillColour1,
-                                             88.0f - 0.0f + x,
-                                             128.0f - 0.0f + y,
-                                             fillColour2,
-                                             0.0f - 0.0f + x,
-                                             128.0f - 0.0f + y,
-                                             false));
+        g.setGradientFill (ColourGradient (fillColour1,
+                                       88.0f - 0.0f + x,
+                                       128.0f - 0.0f + y,
+                                       fillColour2,
+                                       0.0f - 0.0f + x,
+                                       128.0f - 0.0f + y,
+                                       false));
         g.fillRect (x, y, width, height);
     }
 
@@ -189,7 +189,7 @@ void sensorCoordsView::resized()
     //[/UserResized]
 }
 
-void sensorCoordsView::sliderValueChanged (juce::Slider* sliderThatWasMoved)
+void sensorCoordsView::sliderValueChanged (Slider* sliderThatWasMoved)
 {
     //[UsersliderValueChanged_Pre]
     for(int i=0; i<maxQ; i++){

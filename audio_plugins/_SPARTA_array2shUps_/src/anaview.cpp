@@ -7,12 +7,12 @@
   the "//[xyz]" and "//[/xyz]" sections will be retained when the file is loaded
   and re-saved.
 
-  Created with Projucer version: 5.3.2
+  Created with Projucer version: 6.1.6
 
   ------------------------------------------------------------------------------
 
   The Projucer is part of the JUCE library.
-  Copyright (c) 2017 - ROLI Ltd.
+  Copyright (c) 2020 - Raw Material Software Limited.
 
   ==============================================================================
 */
@@ -63,7 +63,7 @@ anaview::anaview (int _width, int _height, float _min_freq, float _max_freq, flo
                                                      _height-(border_pixels_top+border_pixels_bottom),
                                                      _min_freq, _max_freq,
                                                      _min_Y, _max_Y, _yaxislineStepSize, _fs)); /* TODO: switch to the more general "anaview"  */
-    addAndMakeVisible (anaview_windowIncluded.get()); 
+    addAndMakeVisible (anaview_windowIncluded.get());
     anaview_windowIncluded->setAlwaysOnTop(true);
     anaview_windowIncluded->setTopLeftPosition(border_pixels_left, border_pixels_top );
 
@@ -92,7 +92,7 @@ anaview::~anaview()
 }
 
 //==============================================================================
-void anaview::paint (Graphics& g)
+void anaview::paint (juce::Graphics& g)
 {
     //[UserPrePaint] Add your own custom painting code here..
     //[/UserPrePaint]
@@ -214,3 +214,4 @@ END_JUCER_METADATA
 
 //[EndFile] You can add extra defines here...
 //[/EndFile]
+

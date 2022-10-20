@@ -1,7 +1,7 @@
 
 cmake_minimum_required(VERSION 3.15)
 
-project(sparta_array2sh VERSION 1.6.8)
+project(sparta_array2shUps VERSION 0.0.1)
 message(STATUS "  ${PROJECT_NAME}")
 
 # juce helper function to create a library, which is configured as a JUCE plugin
@@ -15,7 +15,7 @@ juce_add_plugin(${PROJECT_NAME}
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE           
     COPY_PLUGIN_AFTER_BUILD     TRUE     # Where does this go in Windows + Linux?
     PLUGIN_MANUFACTURER_CODE    LEOM                
-    PLUGIN_CODE                 ASOA                     
+    PLUGIN_CODE                 ASUP                     
     FORMATS                     VST      # ( VST AAX Unity VST3 AU AUv3 Standalone )
     PRODUCT_NAME                "${PROJECT_NAME}"
 )   
@@ -41,6 +41,7 @@ PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/eqview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sensorCoordsView.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sensorCoordsView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Sarita.h
 )
 
 # Add any extra JUCE-specific pre-processor definitions

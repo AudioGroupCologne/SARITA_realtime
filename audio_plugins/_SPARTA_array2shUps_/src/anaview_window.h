@@ -7,7 +7,7 @@
   the "//[xyz]" and "//[/xyz]" sections will be retained when the file is loaded
   and re-saved.
 
-  Created with Projucer version: 5.3.2
+  Created with Projucer version: 5.4.4
 
   ------------------------------------------------------------------------------
 
@@ -22,8 +22,10 @@
 //[Headers]     -- You can add your own extra header files here --
 
 #include "JuceHeader.h"
-#include "anaview_window.h"
 
+#ifndef M_PI
+#define M_PI ( 3.14159265358979323846264338327950288f )
+#endif
 //[/Headers]
 
 
@@ -36,23 +38,26 @@
     Describe your class and how it works here!
                                                                     //[/Comments]
 */
-class anaview  : public Component
+class anaview_window  : public Component
 {
 public:
     //==============================================================================
-    anaview (int _width, int _height, float _min_freq, float _max_freq, float _min_Y, float _max_Y, String _ylabel, float _yaxislineStepSize, float _fs);
-    ~anaview();
+    anaview_window (int _width, int _height, float _min_freq, float _max_freq, float _min_Y, float _max_Y, float _yaxislineStepSize, float _fs);
+    ~anaview_window();
 
     //==============================================================================
     //[UserMethods]     -- You can add your own custom methods in this section.
     Rectangle<int> localBounds;
-    std::unique_ptr<anaview_window> anaview_windowIncluded;
 
-    void setSolidCurves_Handle(float* _freqVector, float* _solidCurves, int _numFreqPoints, int _numCurves){
-        anaview_windowIncluded->setSolidCurves_Handle(_freqVector, _solidCurves, _numFreqPoints, _numCurves);
+    void setSolidCurves_Handle(float* _freqVector, float* _solidCurves, int _numFreqPoints, int _numCurves)
+    {
+        freqVector = _freqVector;
+        solidCurves = _solidCurves;
+        numCurves =_numCurves;
+        numFreqPoints = _numFreqPoints;
     }
     void setNumCurves(int _numCurves){
-        anaview_windowIncluded->setNumCurves(_numCurves);
+        numCurves = _numCurves;
     }
 
     //[/UserMethods]
@@ -66,8 +71,12 @@ private:
     //[UserVariables]   -- You can add your own custom variables in this section.
     int width, height;
     float min_freq, max_freq, min_Y, max_Y, fs;
-    String ylabel;
     float yaxislineStepSize;
+
+    float* freqVector;
+    float* solidCurves;
+    int numCurves;
+    int numFreqPoints;
 
     //[/UserVariables]
 
@@ -75,8 +84,9 @@ private:
 
 
     //==============================================================================
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (anaview)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (anaview_window)
 };
 
 //[EndFile] You can add extra defines here...
 //[/EndFile]
+
