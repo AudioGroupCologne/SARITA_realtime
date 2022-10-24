@@ -34,7 +34,7 @@
 #include "ipp.h"
 #include "saf.h"           /* Main include header for SAF */
 
-//#define TEST_AUDIO_OUTPUT
+#define TEST_AUDIO_OUTPUT
 
 std::unique_ptr<FileLogger> flogger;
 
@@ -164,6 +164,8 @@ int tmpXcorrBufferSize;
 Ipp8u* tmpXcorrBuffer;
 Ipp32f* correlation;
 float** xcorrBuffer;
+
+float** shiftBuffer;
 Ipp32f *hannWin;
 
 int* currentTimeShift;
@@ -279,12 +281,6 @@ inline int saritaReadConfigFile(const char* path)
     // combination Pointer
     cfg.combinationsPtr = (int8_t**)calloc2d(cfg.combinationsPtrLen, 2, sizeof(int8_t));
     result = readArrayUint8(configFile, (uint8_t**)cfg.combinationsPtr, cfg.combinationsPtrLen, 2);
-
-//    auto jsonString = JSON::toString(cfg.fs);
-//    juce::File jFile = juce::File::getSpecialLocation(File::userDocumentsDirectory).getChildFile("SaritaConfig.json");
-//    JSON::writeToStream(cfg);
-//    jFile.create();
-//    jFile.replaceWithText (jsonString);
     
     return result;
 }
@@ -334,10 +330,13 @@ int setupSarita(int blocksize, int numInputCount, int numOutputCount)
     correlation = ippsMalloc_32f(blocksize * 2);
     
     sparseBuffer = (float***)calloc3d(2, numInputCount/*cfg.denseGridSize*/, blocksize, sizeof(float));
-    denseBuffer = (float***)calloc3d(2,  numInputCount/*cfg.denseGridSize*/, blocksize, sizeof(float));
+    // over sized for shifted samples
+    denseBuffer = (float***)calloc3d(2,  numInputCount/*cfg.denseGridSize*/, blocksize+cfg.maxShiftOverall, sizeof(float));
     outputBuffer = (float***)calloc3d(2,  numInputCount/*cfg.denseGridSize*/, blocksize, sizeof(float));
     xcorrBuffer = (float**)calloc2d(cfg.neighborCombLength, xcorrLen, sizeof(float));
-    
+    // stores samples which are shifted out of the frame
+    shiftBuffer = (float**)calloc2d(numOutputCount, cfg.maxShiftOverall, sizeof(float));
+
     outData = (float**)calloc2d( numInputCount/*cfg.denseGridSize*/, blocksize, sizeof(float));
     
     input = new RingBuffer(numInputCount, saritaBufferSize);
@@ -406,6 +405,13 @@ inline void processFrame (int blocksize, int numInputChannels)
             timeShiftMean += currentTimeShift[nodeIndex] * cfg.weightsNeighborsDense[nodeIndex][dirIdx];
         }
 
+        // zero dense buffer at the end
+        ippsZero_32f(&denseBuffer[BufferNum][dirIdx][blocksize], cfg.maxShiftOverall);
+        // copy last out-of-frame samples to denseBuffer
+        ippsCopy_32f(shiftBuffer[dirIdx], denseBuffer[BufferNum][dirIdx], cfg.maxShiftOverall);
+        // zero shift buffer
+        ippsZero_32f(shiftBuffer[dirIdx], cfg.maxShiftOverall);
+                
         // align every block according to the calculated time shift, weight and sum up
         for (int nodeIndex=0; nodeIndex<numNeighbors; nodeIndex++) {
             // currentBlock = neighborsIRs(nodeIndex, :) * weights(nodeIndex);
@@ -419,12 +425,14 @@ inline void processFrame (int blocksize, int numInputChannels)
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
             if (nodeIndex == 0) {
-                ippsZero_32f(denseBuffer[BufferNum][dirIdx], timeShiftFinal);
-                ippsCopy_32f(currentBlock, &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize-timeShiftFinal);
+                ippsCopy_32f(currentBlock, &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize);
             }
             else
-                ippsAdd_32f_I(currentBlock, &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize-timeShiftFinal);
+                ippsAdd_32f_I(currentBlock, &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize);
         }
+        
+        // save out-of-frame samples to shift buffer
+        ippsCopy_32f(&denseBuffer[BufferNum][dirIdx][blocksize], shiftBuffer[dirIdx], cfg.maxShiftOverall);
     }
 }
 
