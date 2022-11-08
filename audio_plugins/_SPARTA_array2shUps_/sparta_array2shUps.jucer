@@ -17,6 +17,7 @@
               pluginFormats="buildVST" jucerFormatVersion="1">
   <MAINGROUP id="imnfnp" name="sparta_array2shUps">
     <FILE id="OcPzQM" name="Sarita.h" compile="0" resource="0" file="src/Sarita.h"/>
+    <FILE id="zCJ2FM" name="Sarita.cpp" compile="1" resource="0" file="src/Sarita.cpp"/>
     <FILE id="xRdyht" name="ConfigurationHelper.h" compile="0" resource="0"
           file="../resources/ConfigurationHelper.h"/>
     <FILE id="GqUTO4" name="SPARTALookAndFeel.h" compile="0" resource="0"

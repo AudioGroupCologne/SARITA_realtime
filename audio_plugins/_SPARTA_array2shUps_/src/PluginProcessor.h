@@ -27,6 +27,8 @@
 #include <thread>
 #define CONFIGURATIONHELPER_ENABLE_GENERICLAYOUT_METHODS 1
 #include "../../resources/ConfigurationHelper.h"
+#include "Sarita.h"
+
 #define BUILD_VER_SUFFIX ""   /* String to be added before the version name on the GUI (e.g. beta, alpha etc..) */ 
 #ifndef M_PI
 # define M_PI ( 3.14159265358979323846264338327950288f )
@@ -45,12 +47,7 @@ enum {
     k_filterType,
     k_maxGain,
     k_postGain,
-    k_speedOfSound,
-    k_arrayRadius,
-    k_baffleRadius,
-    k_arrayType,
-    k_weightType,
-    k_numSensors,
+    k_overlap,
     
 	k_NumOfParameters
 };
@@ -82,6 +79,8 @@ public:
         return 0;
     }
     
+    Sarita sarita; // FIXME: make private?
+
 private:
     void* hA2sh;           /* array2sh handle */
     int nNumInputs;        /* current number of input channels */
@@ -89,6 +88,7 @@ private:
     int nSampleRate;       /* current host sample rate */
     int nHostBlockSize;    /* typical host block size to expect, in samples */
     File lastDir;
+    File lastCfgFile;
     ValueTree sensors {"Sensors"};
     
     void timerCallback(int timerID) override

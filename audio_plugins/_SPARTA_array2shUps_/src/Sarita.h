@@ -31,12 +31,15 @@
 #ifndef sarita_h
 #define sarita_h
 
+#include <JuceHeader.h>
 #include "ipp.h"
 #include "saf.h"           /* Main include header for SAF */
+#include "array2sh.h"
+#include "../src/array2sh/array2sh_internal.h"
 
-#define TEST_AUDIO_OUTPUT
+//#define TEST_AUDIO_OUTPUT
 
-std::unique_ptr<FileLogger> flogger;
+static std::unique_ptr<juce::FileLogger> flogger;
 
 /*
 * a multi channel vector ring buffer
@@ -56,6 +59,10 @@ public:
     
     int capacity() {
         return size - bufferedBytes;
+    }
+    
+    int numChannels() {
+        return channels;
     }
     
     bool empty() {
@@ -83,7 +90,7 @@ public:
     
     ~RingBuffer()
     {
-        free(data);
+        free(this->data);
     }
     
     void push(const float* input, int len, int ch)
@@ -148,293 +155,106 @@ public:
 };
 
 
-RingBuffer *input;
-RingBuffer *output;
-float*** sparseBuffer; // audio of source grid
-float*** denseBuffer; // audio of upsampled target grid
-float*** outputBuffer;
-
-int saritaBufferSize = 0;
-int saritaOverlapSize;
-int BufferNum = 0; // double buffer 0/1
-
-// cross correlation buffers
-int xcorrLen;
-int tmpXcorrBufferSize;
-Ipp8u* tmpXcorrBuffer;
-Ipp32f* correlation;
-float** xcorrBuffer;
-
-float** shiftBuffer;
-Ipp32f *hannWin;
-
-int* currentTimeShift;
-Ipp32f* currentBlock;
-
-float** outData;
-
-bool configError = true;
-
-/*
- * config data struct from MATLAB
- */
-struct SaritaConfig {
+class Sarita
+{
+    
+public:
+    void processFrame (int blocksize, int numInputChannels);
+    void deallocBuffers();
+    void setOverlap(float newOverlap);
+    void updateOverlap(int blocksize);
+    int setupSarita(const char* path, int blocksize, int numInputCount);
+    void hannWindow(int len, int overlap);
+    int readConfigFile(const char* path);
+    
+    // copy config data to array2sh structs
+    void updateArrayData(void* const hA2sh);
+    
+    int bufferSize = 0;
+    int overlapSize;
+    float overlapPercent=0.25;
+    bool overlapChanged=false;
+    
+    /* config data from MATLAB export */
     // header
-//    int N;                 // order of source grid
-//    int NUpsampling;       // order of target grid
-//    int NRendering;        // rendering order
-    int fs;
-    int overlapInv;         // 1/overlap in %   e.g. 4096/128 => 32
-    int denseGridSize;
-    int maxShiftOverall;
-    int neighborCombLength;  // neighborCombinations size = neighborCombLength * 2
-    int idxNeighborsDenseLen; // idxNeighborsDense array size = idxNeighborsDenseLen * dense grid size
-    int combinationsPtrLen;  // length of combinations pointer, y is always 2
+    uint32_t fs;
+    uint32_t N;                 // order of source grid
+    uint32_t NUpsampling;       // order of target grid
+    uint32_t NRendering;        // rendering order
+    float radius;               // radius of array
+    uint32_t denseGridSize;
+    uint32_t maxShiftOverall;
+    uint32_t neighborCombLength;   // neighborCombinations size = neighborCombLength * 2
+    uint32_t idxNeighborsDenseLen; // idxNeighborsDense array size = idxNeighborsDenseLen * dense grid size
+    uint32_t combinationsPtrLen;   // length of combinations pointer, y is always 2
 
     // data
     uint8_t** neighborCombinations; // Array containing all combinations of nearest neighbors
-    uint8_t* numNeighborsDense;     // Number of nearest neighbors for each sampling point
+    uint8_t* numNeighborsDense = NULL;     // Number of nearest neighbors for each sampling point
     uint8_t** idxNeighborsDense;    // Indices of neighbors of each sampling point
     float** weightsNeighborsDense;  // Weights of neighbors of each sampling point
     uint8_t** maxShiftDense;
     int8_t** combinationsPtr;       // Array describing which neighbors combination is required for each cross correlations
-} cfg;
+    float** denseGrid;              // Az, El and weight of each target sensor
+    /* end of config data */
 
-/*
-* binary file read helpers
-*/
-int readArrayUint8(FILE *fid, uint8_t** dst, int sizeX, int sizeY)
-{
-    uint8_t* tmp = (uint8_t*) malloc(sizeX * sizeY * sizeof(uint8_t));
-    int result = fread(tmp, sizeof(uint8_t), sizeX * sizeY, fid);
-    // copy with stride
-    for (int x=0; x<sizeX; x++) {
-        for (int y=0; y<sizeY; y++) {
-            dst[x][y] = tmp[x*sizeY + y];
-//            int z = dst[x][y];
-//            DBG(String(x) + " " + String(y) + " = " + String(z));
-        }
-    }
-    free(tmp);
-    return result;
-}
+    RingBuffer *input;
+    RingBuffer *output;
+    float*** sparseBuffer = NULL; // audio of source grid
+    float*** denseBuffer = NULL; // audio of upsampled target grid
+    float*** outputBuffer = NULL;
+    float** outData = NULL;
+    bool configError = true;
+    int bufferNum = 0; // double buffer 0/1
 
-
-int readArrayFloat(FILE *fid, float** dst, int sizeX, int sizeY)
-{
-    float* tmp = (float*) malloc(sizeX * sizeY * sizeof(float));
-    int result = fread(tmp, sizeof(float), sizeX * sizeY, fid);
-    // copy with stride
-    for (int x=0; x<sizeX; x++) {
-        for (int y=0; y<sizeY; y++) {
-            dst[x][y] = tmp[x*sizeY + y];
-//            float z = dst[x][y];
-//            DBG(String(x) + " " + String(y) + " = " + String(z));
-        }
-    }
-    free(tmp);
-    return result;
-}
-
-
-/*
-* read config data from matlab workspace dump
-*/
-inline int saritaReadConfigFile(const char* path)
-{
-    FILE* configFile = fopen(path, "rb");
-
-    /* read config file header data
-     * fs, overlap, dense gridSize, maxShiftOverall,
-     * neighborCombLength, idxNeighborsDenseLen, combinationPtrLen
-     */
-    size_t result = fread(&cfg, sizeof(int), 7, configFile);
-
-    /* read config file data */
-    // neighbor combinations
-    cfg.neighborCombinations = (uint8_t**)calloc2d(cfg.neighborCombLength, 2, sizeof(uint8_t));
-    result = readArrayUint8(configFile, cfg.neighborCombinations, cfg.neighborCombLength, 2);
-
-    // num of neighbors dense grid
-    cfg.numNeighborsDense = (uint8_t*)malloc(cfg.denseGridSize * sizeof(uint8_t));
-    result = fread(cfg.numNeighborsDense, sizeof(uint8_t), cfg.denseGridSize, configFile);
-
-    // dense grid neighbors index
-    cfg.idxNeighborsDense = (uint8_t**)calloc2d(cfg.idxNeighborsDenseLen, cfg.denseGridSize, sizeof(uint8_t));
-    result = readArrayUint8(configFile, cfg.idxNeighborsDense, cfg.idxNeighborsDenseLen, cfg.denseGridSize);
-
-    // dense grid neighbors weights
-    cfg.weightsNeighborsDense = (float**)calloc2d(cfg.idxNeighborsDenseLen, cfg.denseGridSize, sizeof(float));
-    result = readArrayFloat(configFile, cfg.weightsNeighborsDense, cfg.idxNeighborsDenseLen, cfg.denseGridSize);
-
-    // max shift dense
-    cfg.maxShiftDense = (uint8_t**)calloc2d(cfg.idxNeighborsDenseLen-1, cfg.denseGridSize, sizeof(uint8_t));
-    result = readArrayUint8(configFile, cfg.maxShiftDense, cfg.idxNeighborsDenseLen-1, cfg.denseGridSize);
-//
-//    for (int x=0; x< (cfg.idxNeighborsDenseLen-1); x++) {
-//        for (int y=0; y<cfg.denseGridSize; y++) {
-//            int z = cfg.maxShiftDense[x][y];
-//            DBG(String(x) + " " + String(y) + " = " + String(z));
-//        }
-//    }
+private:
     
-    // combination Pointer
-    cfg.combinationsPtr = (int8_t**)calloc2d(cfg.combinationsPtrLen, 2, sizeof(int8_t));
-    result = readArrayUint8(configFile, (uint8_t**)cfg.combinationsPtr, cfg.combinationsPtrLen, 2);
-    
-    return result;
-}
+    // cross correlation buffers
+    int xcorrLen;
+    int tmpXcorrBufferSize;
+    Ipp8u* tmpXcorrBuffer = NULL;
+    Ipp32f* correlation;
+    float** xcorrBuffer;
 
+    Ipp32f *hannWin = NULL;
+    float** shiftBuffer;
+    int* currentTimeShift;
+    Ipp32f* currentBlock;
 
-/*
- *  custom window: window ramp up and down only in overlapping parts
- */
-inline void saritaWin(int len, int overlap)
-{
-    hannWin = (float*) malloc(len * sizeof(float));
-    float *tmpWin = (float*) malloc(overlap*2 * sizeof(float));
-
-    // ippsSet_32f & ippsWinHann_32f_I was added to custom saf ipp list!
-    ippsSet_32f(1, tmpWin, overlap*2);
-    ippsWinHann_32f_I(tmpWin, overlap*2);
-    
-    ippsSet_32f(1, hannWin, len);
-    ippsCopy_32f(tmpWin, hannWin, overlap); // ramp up
-    ippsCopy_32f(&tmpWin[overlap], &hannWin[len-overlap], overlap); // ramp down
-}
-
-
-int setupSarita(int blocksize, int numInputCount, int numOutputCount)
-{
-    configError = true;
-    
-    // FIXME: move to better location. currently "~/Documents/GitHub/SariteConfig.dat" };
-    juce::File f = juce::File::getSpecialLocation(File::userDocumentsDirectory).getChildFile("SaritaConfig.dat");
-    if (!f.existsAsFile())
-        return -1;
-    
-    const char *p = f.getFullPathName().getCharPointer();
-    if(saritaReadConfigFile(p) < 0)
-        return -1;
-    
-    saritaBufferSize = 2*blocksize; //  (2 - SARITA_OVERLAP)*blockSize;
-    saritaOverlapSize = (int)blocksize / cfg.overlapInv;
-    saritaWin(blocksize, saritaOverlapSize);
-    
-    // allocate buffers
-    xcorrLen = 2*blocksize-1;
-    IppStatus stat;
-    IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
-    stat = ippsCrossCorrNormGetBufferSize(blocksize, blocksize, xcorrLen, -blocksize-1, ipp32f, funCfgNormNo, &tmpXcorrBufferSize);
-    tmpXcorrBuffer = ippsMalloc_8u(tmpXcorrBufferSize);
-    correlation = ippsMalloc_32f(blocksize * 2);
-    
-    sparseBuffer = (float***)calloc3d(2, numInputCount/*cfg.denseGridSize*/, blocksize, sizeof(float));
-    // over sized for shifted samples
-    denseBuffer = (float***)calloc3d(2,  numInputCount/*cfg.denseGridSize*/, blocksize+cfg.maxShiftOverall, sizeof(float));
-    outputBuffer = (float***)calloc3d(2,  numInputCount/*cfg.denseGridSize*/, blocksize, sizeof(float));
-    xcorrBuffer = (float**)calloc2d(cfg.neighborCombLength, xcorrLen, sizeof(float));
-    // stores samples which are shifted out of the frame
-    shiftBuffer = (float**)calloc2d(numOutputCount, cfg.maxShiftOverall, sizeof(float));
-
-    outData = (float**)calloc2d( numInputCount/*cfg.denseGridSize*/, blocksize, sizeof(float));
-    
-    input = new RingBuffer(numInputCount, saritaBufferSize);
-    output = new RingBuffer(numOutputCount, saritaBufferSize);
-
-    currentTimeShift = (int*)malloc(cfg.idxNeighborsDenseLen * sizeof(int)); // TODO: correct size?
-    currentBlock = ippsMalloc_32f(blocksize);
-    
-    configError = false;
-    return 0;
-}
-
-/*
- * process all channels of a frame
- * read from input ringbuffer and write to denseBuffer
- */
-inline void processFrame (int blocksize, int numInputChannels)
-{
-    // apply hann window
-    for (int ch=0; ch<numInputChannels; ch++) {
-        input->popWithOverlap(sparseBuffer[0][ch], ch, blocksize, saritaOverlapSize); // TODO: maybe no double buffer needed here
-        ippsMul_32f_I(hannWin, sparseBuffer[0][ch], blocksize);
-    }
-    
-    // in each frame the cross-correlation required for the upsampling are determined
-    uint8_t n1, n2;
-    for (int n=0; n<cfg.neighborCombLength; n++) {
-        n1 = cfg.neighborCombinations[n][0] - 1;
-        n2 = cfg.neighborCombinations[n][1] - 1;
-        // safety limit to max num channels. TODO: assert?
-        n1 = n1 > 63? 63 : n1;
-        n2 = n2 > 63? 63 : n2;
-        // cxcorr(processingBuffer[BufferNum][n1], processingBuffer[BufferNum][n2], xcorrBuffer[n], blocksize, blocksize); // cpu hog
-        // vDSP_conv(processingBuffer[BufferNum][n1], 1, processingBuffer[BufferNum][n2], 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
-        IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
-
-        // ipp correlates the reverse way compared to Matlab
-        ippsCrossCorrNorm_32f(sparseBuffer[0][n2], blocksize, sparseBuffer[0][n1], blocksize, xcorrBuffer[n], xcorrLen, -blocksize+1, funCfgNormNo, tmpXcorrBuffer); // performs best, switches to fft calc at higher block sizes
-    }
-
-    int neighborsIndexCounter=0; // Counter which entry in combination_ptr is to be assessed
-    for (int dirIdx=0; dirIdx<cfg.denseGridSize; dirIdx++) {
-        currentTimeShift[0] = 0;
-        float timeShiftMean = 0;
-        
-        int numNeighbors = cfg.numNeighborsDense[dirIdx];
-        for(int nodeIndex=1; nodeIndex<numNeighbors; nodeIndex++) {
-            // correlation=correlationsFrame(:,combination_ptr(1,neighborsIndexCounter));
-            int x = cfg.combinationsPtr[neighborsIndexCounter][0] - 1;
-            ippsCopy_32f(xcorrBuffer[x], correlation, xcorrLen);
-
-            if (cfg.combinationsPtr[neighborsIndexCounter][1] == -1) {
-                ippsFlip_32f_I(correlation, xcorrLen);
+    /*
+    * binary file read helpers
+    */
+    int readArrayUint8(FILE *fid, uint8_t** dst, int sizeX, int sizeY)
+    {
+        uint8_t* tmp = (uint8_t*) malloc(sizeX * sizeY * sizeof(uint8_t));
+        int result = fread(tmp, sizeof(uint8_t), sizeX * sizeY, fid);
+        // copy with stride
+        for (int x=0; x<sizeX; x++) {
+            for (int y=0; y<sizeY; y++) {
+                dst[x][y] = tmp[x*sizeY + y];
+    //            int z = dst[x][y];
+    //            DBG(String(x) + " " + String(y) + " = " + String(z));
             }
-            neighborsIndexCounter++;
-            
-            // look for maximal value in the crosscorrelated IRs only in the relevant area
-            // correlation = correlation(frame_length-maxShift(nodeIndex-1):frame_length+maxShift(nodeIndex-1));
-            uint8_t maxShift = cfg.maxShiftDense[nodeIndex-1][dirIdx];
-            int lowestLagIdx = blocksize-maxShift;
-            int maxPos;
-            int shiftLen = 2*maxShift+1; // TODO: correct?
-            Ipp32f maxVal; // unused
-            ippsMaxIndx_32f(&correlation[lowestLagIdx], shiftLen, &maxVal, &maxPos);
-            currentTimeShift[nodeIndex] = (maxPos - (shiftLen + 1) / 2);
-            timeShiftMean += currentTimeShift[nodeIndex] * cfg.weightsNeighborsDense[nodeIndex][dirIdx];
         }
-
-        // zero dense buffer at the end
-        ippsZero_32f(&denseBuffer[BufferNum][dirIdx][blocksize], cfg.maxShiftOverall);
-        // copy last out-of-frame samples to denseBuffer
-        ippsCopy_32f(shiftBuffer[dirIdx], denseBuffer[BufferNum][dirIdx], cfg.maxShiftOverall);
-        // zero shift buffer
-        ippsZero_32f(shiftBuffer[dirIdx], cfg.maxShiftOverall);
-                
-        // align every block according to the calculated time shift, weight and sum up
-        for (int nodeIndex=0; nodeIndex<numNeighbors; nodeIndex++) {
-            // currentBlock = neighborsIRs(nodeIndex, :) * weights(nodeIndex);
-            int idx = cfg.idxNeighborsDense[nodeIndex][dirIdx]-1;
-            float w = cfg.weightsNeighborsDense[nodeIndex][dirIdx];
-            ippsMulC_32f(sparseBuffer[0][idx], w, currentBlock, blocksize);
-
-            int timeShiftFinal = round(-timeShiftMean + currentTimeShift[nodeIndex] + cfg.maxShiftOverall); // As maxShiftOverall is added, timeShiftFinal will always be positive
-            timeShiftFinal = (timeShiftFinal < 0) ? 0: timeShiftFinal; // Added 22.12.2021 to assure that timeShiftFinal does not become negative
-            
-            //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
-            //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
-            if (nodeIndex == 0) {
-                ippsCopy_32f(currentBlock, &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize);
-            }
-            else
-                ippsAdd_32f_I(currentBlock, &denseBuffer[BufferNum][dirIdx][timeShiftFinal], blocksize);
-        }
-        
-        // save out-of-frame samples to shift buffer
-        ippsCopy_32f(&denseBuffer[BufferNum][dirIdx][blocksize], shiftBuffer[dirIdx], cfg.maxShiftOverall);
+        free(tmp);
+        return result;
     }
-}
 
+    int readArrayFloat(FILE *fid, float** dst, int sizeX, int sizeY)
+    {
+        float* tmp = (float*) malloc(sizeX * sizeY * sizeof(float));
+        int result = fread(tmp, sizeof(float), sizeX * sizeY, fid);
+        // copy with stride
+        for (int x=0; x<sizeX; x++) {
+            for (int y=0; y<sizeY; y++) {
+                dst[x][y] = tmp[x*sizeY + y];
+    //            float z = dst[x][y];
+    //            DBG(String(x) + " " + String(y) + " = " + String(z));
+            }
+        }
+        free(tmp);
+        return result;
+    }
+};
 
 #endif /* sarita_h */

@@ -47,7 +47,7 @@ public:
     //[UserMethods]     -- You can add your own custom methods in this section.
     void setUseDegreesInstead(bool newState);
     void setQ(int newQ){
-		newQ = newQ > 64 ? 64 : newQ;
+//		newQ = newQ > 64 ? 64 : newQ;
         refreshCoords();
 		if (newQ != currentQ) {
 			currentQ = newQ;

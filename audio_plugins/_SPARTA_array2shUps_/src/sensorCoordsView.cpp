@@ -44,12 +44,10 @@ sensorCoordsView::sensorCoordsView (PluginProcessor* ownerFilter, int _maxQ, int
 
     dummySlider->setBounds (-176, 144, 96, 16);
 
-
     //[UserPreSize]
     //[/UserPreSize]
 
     setSize (176, 400);
-
 
     //[Constructor] You can add your own custom stuff here..
     setSize (sensorEdit_width, sensorEdit_height*_currentQ);

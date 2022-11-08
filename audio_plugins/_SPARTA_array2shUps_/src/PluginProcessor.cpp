@@ -21,7 +21,6 @@
 */
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#include "Sarita.h"
 
 PluginProcessor::PluginProcessor() :
 	AudioProcessor(BusesProperties()
@@ -43,18 +42,13 @@ void PluginProcessor::setParameter (int index, float newValue)
     /* standard parameters */
     if(index < k_NumOfParameters){
         switch (index) {
+            case k_overlap:     sarita.setOverlap(newValue);
             case k_outputOrder:   array2sh_setEncodingOrder(hA2sh, (SH_ORDERS)(int)(newValue*(float)(MAX_SH_ORDER-1) + 1.5f)); break;
             case k_channelOrder:  array2sh_setChOrder(hA2sh, (int)(newValue*(float)(NUM_CH_ORDERINGS-1) + 1.5f)); break;
             case k_normType:      array2sh_setNormType(hA2sh, (int)(newValue*(float)(NUM_NORM_TYPES-1) + 1.5f)); break;
             case k_filterType:    array2sh_setFilterType(hA2sh, (ARRAY2SH_FILTER_TYPES)(int)(newValue*(float)(ARRAY2SH_NUM_FILTER_TYPES-1) + 1.5f)); break;
             case k_maxGain:       array2sh_setRegPar(hA2sh, newValue*(ARRAY2SH_MAX_GAIN_MAX_VALUE-ARRAY2SH_MAX_GAIN_MIN_VALUE)+ARRAY2SH_MAX_GAIN_MIN_VALUE); break;
             case k_postGain:      array2sh_setGain(hA2sh, newValue*(ARRAY2SH_POST_GAIN_MAX_VALUE-ARRAY2SH_POST_GAIN_MIN_VALUE)+ARRAY2SH_POST_GAIN_MIN_VALUE); break;
-            case k_speedOfSound:  array2sh_setc(hA2sh, newValue*(ARRAY2SH_SPEED_OF_SOUND_MAX_VALUE-ARRAY2SH_SPEED_OF_SOUND_MIN_VALUE)+ARRAY2SH_SPEED_OF_SOUND_MIN_VALUE); break;
-            case k_arrayRadius:   array2sh_setr(hA2sh, (newValue*(ARRAY2SH_ARRAY_RADIUS_MAX_VALUE-ARRAY2SH_ARRAY_RADIUS_MIN_VALUE)+ARRAY2SH_ARRAY_RADIUS_MIN_VALUE)/1e3f); break;
-            case k_baffleRadius:  array2sh_setR(hA2sh, (newValue*(ARRAY2SH_BAFFLE_RADIUS_MAX_VALUE-ARRAY2SH_BAFFLE_RADIUS_MIN_VALUE)+ARRAY2SH_BAFFLE_RADIUS_MIN_VALUE)/1e3f); break;
-            case k_arrayType:     array2sh_setArrayType(hA2sh, (ARRAY2SH_ARRAY_TYPES)(int)(newValue*(float)(ARRAY2SH_NUM_ARRAY_TYPES-1) + 1.5f)); break;
-            case k_weightType:    array2sh_setWeightType(hA2sh, (ARRAY2SH_WEIGHT_TYPES)(int)(newValue*(float)(ARRAY2SH_NUM_WEIGHT_TYPES-1) + 1.5f)); break;
-            case k_numSensors:    array2sh_setNumSensors(hA2sh, (int)(newValue*(float)(ARRAY2SH_MAX_NUM_SENSORS)+0.5)); break;
         }
     }
     /* sensor direction parameters */
@@ -85,18 +79,13 @@ float PluginProcessor::getParameter (int index)
     /* standard parameters */
     if(index < k_NumOfParameters){
         switch (index) {
+            case k_overlap: return (float) sarita.overlapPercent;
             case k_outputOrder:   return (float)(array2sh_getEncodingOrder(hA2sh)-1)/(float)(MAX_SH_ORDER-1);
             case k_channelOrder:  return (float)(array2sh_getChOrder(hA2sh)-1)/(float)(NUM_CH_ORDERINGS-1);
             case k_normType:      return (float)(array2sh_getNormType(hA2sh)-1)/(float)(NUM_NORM_TYPES-1);
             case k_filterType:    return (float)(array2sh_getFilterType(hA2sh)-1)/(float)(ARRAY2SH_NUM_FILTER_TYPES-1);
             case k_maxGain:       return (array2sh_getRegPar(hA2sh)-ARRAY2SH_MAX_GAIN_MIN_VALUE)/(ARRAY2SH_MAX_GAIN_MAX_VALUE-ARRAY2SH_MAX_GAIN_MIN_VALUE);
             case k_postGain:      return (array2sh_getGain(hA2sh)-ARRAY2SH_POST_GAIN_MIN_VALUE)/(ARRAY2SH_POST_GAIN_MAX_VALUE-ARRAY2SH_POST_GAIN_MIN_VALUE);
-            case k_speedOfSound:  return (array2sh_getc(hA2sh)-ARRAY2SH_SPEED_OF_SOUND_MIN_VALUE)/(ARRAY2SH_SPEED_OF_SOUND_MAX_VALUE-ARRAY2SH_SPEED_OF_SOUND_MIN_VALUE);
-            case k_arrayRadius:   return (/*m->mm*/1e3f*array2sh_getr(hA2sh)-ARRAY2SH_ARRAY_RADIUS_MIN_VALUE)/(ARRAY2SH_ARRAY_RADIUS_MAX_VALUE-ARRAY2SH_ARRAY_RADIUS_MIN_VALUE);
-            case k_baffleRadius:  return (/*m->mm*/1e3f*array2sh_getR(hA2sh)-ARRAY2SH_BAFFLE_RADIUS_MIN_VALUE)/(ARRAY2SH_BAFFLE_RADIUS_MAX_VALUE-ARRAY2SH_BAFFLE_RADIUS_MIN_VALUE);
-            case k_arrayType:     return (float)(array2sh_getArrayType(hA2sh)-1)/(float)(ARRAY2SH_NUM_ARRAY_TYPES-1);
-            case k_weightType:    return (float)(array2sh_getWeightType(hA2sh)-1)/(float)(ARRAY2SH_NUM_WEIGHT_TYPES-1);
-            case k_numSensors:    return (float)(array2sh_getNumSensors(hA2sh))/(float)(ARRAY2SH_MAX_NUM_SENSORS);
             default: return 0.0f;
         }
     }
@@ -125,18 +114,13 @@ const String PluginProcessor::getParameterName (int index)
     /* standard parameters */
     if(index < k_NumOfParameters){
         switch (index) {
+            case k_overlap:         return "overlap";
             case k_outputOrder:     return "order";
             case k_channelOrder:    return "channel_order";
             case k_normType:        return "norm_type";
             case k_filterType:      return "filter_type";
             case k_maxGain:         return "max_gain";
             case k_postGain:        return "post_gain";
-            case k_speedOfSound:    return "speed_of_sound";
-            case k_arrayRadius:     return "array_radius";
-            case k_baffleRadius:    return "baffle_radius";
-            case k_arrayType:       return "array_type";
-            case k_weightType:      return "weight_type";
-            case k_numSensors:      return "num_sensors";
             default: return "NULL";
         }
     }
@@ -155,6 +139,7 @@ const String PluginProcessor::getParameterText(int index)
     /* standard parameters */
     if(index < k_NumOfParameters){
         switch (index) {
+            case k_overlap: return "FIXME";
             case k_outputOrder: return String(array2sh_getEncodingOrder(hA2sh));
             case k_channelOrder:
                 switch(array2sh_getChOrder(hA2sh)){
@@ -180,26 +165,6 @@ const String PluginProcessor::getParameterText(int index)
                 }
             case k_maxGain:      return String(array2sh_getRegPar(hA2sh)) + " dB";
             case k_postGain:     return String(array2sh_getGain(hA2sh)) + " dB";
-            case k_speedOfSound: return String(array2sh_getc(hA2sh)) + " m/s";
-            case k_arrayRadius:  return String(/*m->mm*/1e3f*array2sh_getr(hA2sh)) + " mm";
-            case k_baffleRadius: return String(/*m->mm*/1e3f*array2sh_getR(hA2sh)) + " mm";
-            case k_arrayType:
-                switch(array2sh_getArrayType(hA2sh)){
-                    case ARRAY_SPHERICAL:   return "Spherical";
-                    case ARRAY_CYLINDRICAL: return "Cylindrical";
-                    default: return "NULL";
-                }
-            case k_weightType:
-                switch(array2sh_getWeightType(hA2sh)){
-                    case WEIGHT_RIGID_OMNI:   return "Rigid-Omni";
-                    case WEIGHT_RIGID_CARD:   return "Rigid-Card";
-                    case WEIGHT_RIGID_DIPOLE: return "Rigid-Dipole";
-                    case WEIGHT_OPEN_OMNI:    return "Open-Omni";
-                    case WEIGHT_OPEN_CARD:    return "Open-Card";
-                    case WEIGHT_OPEN_DIPOLE:  return "Open-Dipole";
-                    default: return "NULL";
-                }
-            case k_numSensors: return String(array2sh_getNumSensors(hA2sh));
             default: return "NULL";
         }
     }
@@ -289,12 +254,15 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     nNumOutputs =  getTotalNumOutputChannels();
     nSampleRate = (int)(sampleRate + 0.5);
 
-    // SARITA
-    setupSarita(nHostBlockSize, nNumInputs, nNumOutputs);
-    
     array2sh_init(hA2sh, nSampleRate);
-//    AudioProcessor::setLatencySamples(array2sh_getProcessingDelay());
-    AudioProcessor::setLatencySamples(nHostBlockSize + cfg.maxShiftOverall); // TODO: add array2sh_getProcessingDelay()?
+    
+    loadConfiguration(lastCfgFile);
+    
+#ifdef TEST_AUDIO_OUTPUT
+    AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall);
+#else
+    AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall + array2sh_getProcessingDelay());
+#endif
 }
 
 void PluginProcessor::releaseResources()
@@ -311,59 +279,68 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
 //    float* pFrameData[MAX_NUM_CHANNELS];
     int frameSize = array2sh_getFrameSize();
     
+    if (sarita.overlapChanged) {
+        sarita.updateOverlap(nHostBlockSize);
+    }
+    
     // if config file read is not successful
-    if (configError)
+    if (sarita.configError || nCurrentBlockSize < nHostBlockSize)
         buffer.clear();
     else
     {
         // fill input ring buffer
         for (int ch = 0; ch < nNumInputs; ch++) {
             auto* channelData = buffer.getReadPointer(ch);
-            input->push(channelData, nCurrentBlockSize, ch);
+            sarita.input->push(channelData, nCurrentBlockSize, ch);
         }
 
         // process frame when frame size fulfilled
-        while (input->bufferedBytes >= nHostBlockSize) { // TODO: independent buffer size
+        while (sarita.input->bufferedBytes >= nHostBlockSize) { // TODO: independent buffer size
             // process frame for all channels
-            processFrame(nHostBlockSize, nNumOutputs); // TODO: channel num
+            sarita.processFrame(nCurrentBlockSize, nNumInputs);
 
             // add overlapping part of current frame to last frame end
-            for (int ch=0; ch<nNumOutputs; ch++) {
-                int overlapIdx = nCurrentBlockSize-saritaOverlapSize;
-                utility_svvadd(&denseBuffer[BufferNum][ch][0], &denseBuffer[!BufferNum][ch][overlapIdx], saritaOverlapSize, outputBuffer[BufferNum][ch]);
+            for (int ch=0; ch<sarita.denseGridSize; ch++) {
+                int overlapIdx = juce::jmax(nCurrentBlockSize-sarita.overlapSize, 0);
+                utility_svvadd(&sarita.denseBuffer[sarita.bufferNum][ch][0], &sarita.denseBuffer[!sarita.bufferNum][ch][overlapIdx], sarita.overlapSize, sarita.outputBuffer[sarita.bufferNum][ch]);
             }
-        
             // copy last overlap to output ring buffer
-            for (int ch=0; ch<nNumOutputs; ch++) {
-                output->push(outputBuffer[BufferNum][ch], saritaOverlapSize, ch);
+            for (int ch=0; ch<sarita.denseGridSize ; ch++) {
+                sarita.output->push(sarita.outputBuffer[sarita.bufferNum][ch], sarita.overlapSize, ch);
             }
             // copy non overlapping part to output ring buffer
-            for (int ch=0; ch<nNumOutputs; ch++) {
-                output->push(&denseBuffer[BufferNum][ch][saritaOverlapSize], nHostBlockSize-2*saritaOverlapSize, ch);
+            for (int ch=0; ch<sarita.denseGridSize; ch++) {
+                sarita.output->push(&sarita.denseBuffer[sarita.bufferNum][ch][sarita.overlapSize], nHostBlockSize-2*sarita.overlapSize, ch);
             }
-            BufferNum ^= 1; // swap buffer
+            sarita.bufferNum ^= 1; // swap buffer
         }
         
         // test output
 #ifdef TEST_AUDIO_OUTPUT
-        if (output->bufferedBytes >= nHostBlockSize) {
-            for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
+        if (sarita.output->bufferedBytes >= nHostBlockSize) {
+            for (int ch = 0; ch<buffer.getNumChannels(); ch++) {
                 float* channelData = buffer.getWritePointer(ch);
-                output->pop(channelData, ch, nHostBlockSize);
+                sarita.output->pop(channelData, ch, nHostBlockSize);
+            }
+            // pop all ring buffer channels
+            float devnull[8192];
+            if (buffer.getNumChannels() < sarita.denseGridSize) {
+                for (int ch=buffer.getNumChannels(); ch<sarita.denseGridSize; ch++)
+                    sarita.output->pop(devnull, ch, nHostBlockSize);
             }
         }
 #else
         /*
          * process array2sh with dense grid
          */
-        if ((output->bufferedBytes >= nHostBlockSize) && (nHostBlockSize % frameSize == 0)) { /* buffer filled and blocksize divisible by frame size */
+        if ((sarita.output->bufferedBytes >= nHostBlockSize) && (nHostBlockSize % frameSize == 0)) { /* buffer filled and blocksize divisible by frame size */
             for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
-                for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
+                for (int ch = 0; ch < sarita.denseGridSize /*sarita.output->numChannels()*/; ch++) {
                     // copy to array2Sh processing buffer
-                    output->pop(outData[ch], ch, frameSize);
+                    sarita.output->pop(sarita.outData[ch], ch, frameSize);
                 }
-                /* perform processing */
-                array2sh_process(hA2sh, outData, bufferData, nNumOutputs, nNumOutputs, frameSize);
+                /* perform processing and write to AudioSampleBuffer */
+                array2sh_process(hA2sh, sarita.outData, bufferData, sarita.denseGridSize, nNumOutputs, frameSize);
             }
         }
 #endif
@@ -390,14 +367,15 @@ void PluginProcessor::getStateInformation (MemoryBlock& destData)
     XmlElement xml("ARRAY2SHPLUGINSETTINGS");
     
     xml.setAttribute("order", array2sh_getEncodingOrder(hA2sh));
-    xml.setAttribute("Q", array2sh_getNumSensors(hA2sh));
-    for(int i=0; i<MAX_NUM_CHANNELS; i++){
-        xml.setAttribute("AziRad" + String(i), array2sh_getSensorAzi_rad(hA2sh,i));
-        xml.setAttribute("ElevRad" + String(i), array2sh_getSensorElev_rad(hA2sh,i));
-    }
-    xml.setAttribute("r", array2sh_getr(hA2sh));
-    xml.setAttribute("R", array2sh_getR(hA2sh));
-    xml.setAttribute("arrayType", array2sh_getArrayType(hA2sh));
+    xml.setAttribute("overlap", sarita.overlapPercent);
+//    xml.setAttribute("Q", array2sh_getNumSensors(hA2sh));
+//    for(int i=0; i<MAX_NUM_CHANNELS; i++){
+//        xml.setAttribute("AziRad" + String(i), array2sh_getSensorAzi_rad(hA2sh,i));
+//        xml.setAttribute("ElevRad" + String(i), array2sh_getSensorElev_rad(hA2sh,i));
+//    }
+//    xml.setAttribute("r", array2sh_getr(hA2sh));
+//    xml.setAttribute("R", array2sh_getR(hA2sh));
+//    xml.setAttribute("arrayType", ARRAY_SPHERICAL); // array2sh_getArrayType(hA2sh));
     xml.setAttribute("weightType", array2sh_getWeightType(hA2sh));
     xml.setAttribute("filterType", array2sh_getFilterType(hA2sh));
     xml.setAttribute("regPar", array2sh_getRegPar(hA2sh));
@@ -406,9 +384,14 @@ void PluginProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute("c", array2sh_getc(hA2sh));
     xml.setAttribute("gain", array2sh_getGain(hA2sh));
     //xml.setAttribute("maxFreq", array2sh_getMaxFreq(hA2sh));
-    xml.setAttribute("enableDiffPastAliasing", array2sh_getDiffEQpastAliasing(hA2sh));
+    xml.setAttribute("enableDiffPastAliasing", 0); // array2sh_getDiffEQpastAliasing(hA2sh));
     
-    xml.setAttribute("JSONFilePath", lastDir.getFullPathName());
+    String pathname = lastDir.getFullPathName();
+    if (pathname.isNotEmpty())
+        xml.setAttribute("CfgFilePath", pathname);
+    String filename = lastCfgFile.getFullPathName();
+    if (filename.isNotEmpty())
+        xml.setAttribute("CfgFileName", filename);
     
     copyXmlToBinary(xml, destData);
 }
@@ -420,24 +403,26 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
     
     if (xmlState != nullptr) {
         if (xmlState->hasTagName("ARRAY2SHPLUGINSETTINGS")) {
-            for(i=0; i<array2sh_getMaxNumSensors(); i++){
-                if(xmlState->hasAttribute("AziRad" + String(i)))
-                    array2sh_setSensorAzi_rad(hA2sh, i, (float)xmlState->getDoubleAttribute("AziRad" + String(i), 0.0f));
-                if(xmlState->hasAttribute("ElevRad" + String(i)))
-                    array2sh_setSensorElev_rad(hA2sh, i, (float)xmlState->getDoubleAttribute("ElevRad" + String(i), 0.0f));
-            }
+//            for(i=0; i<array2sh_getMaxNumSensors(); i++){
+//                if(xmlState->hasAttribute("AziRad" + String(i)))
+//                    array2sh_setSensorAzi_rad(hA2sh, i, (float)xmlState->getDoubleAttribute("AziRad" + String(i), 0.0f));
+//                if(xmlState->hasAttribute("ElevRad" + String(i)))
+//                    array2sh_setSensorElev_rad(hA2sh, i, (float)xmlState->getDoubleAttribute("ElevRad" + String(i), 0.0f));
+//            }
             if(xmlState->hasAttribute("order"))
                 array2sh_setEncodingOrder(hA2sh, xmlState->getIntAttribute("order", 1));
-            if(xmlState->hasAttribute("Q"))
-                array2sh_setNumSensors(hA2sh, xmlState->getIntAttribute("Q", 4));
-            if(xmlState->hasAttribute("r"))
-                array2sh_setr(hA2sh, (float)xmlState->getDoubleAttribute("r", 0.042));
-            if(xmlState->hasAttribute("R"))
-                array2sh_setR(hA2sh, (float)xmlState->getDoubleAttribute("R", 0.042));
-            if(xmlState->hasAttribute("arrayType"))
-                array2sh_setArrayType(hA2sh, xmlState->getIntAttribute("arrayType", 1));
-            if(xmlState->hasAttribute("weightType"))
-                array2sh_setWeightType(hA2sh, xmlState->getIntAttribute("weightType", 1));
+            if(xmlState->hasAttribute("overlap"))
+                sarita.setOverlap(xmlState->getDoubleAttribute("overlap", 25.0));
+//            if(xmlState->hasAttribute("Q"))
+//                array2sh_setNumSensors(hA2sh, xmlState->getIntAttribute("Q", 4));
+//            if(xmlState->hasAttribute("r"))
+//                array2sh_setr(hA2sh, (float)xmlState->getDoubleAttribute("r", 0.042));
+//            if(xmlState->hasAttribute("R"))
+//                array2sh_setR(hA2sh, (float)xmlState->getDoubleAttribute("R", 0.042));
+//            if(xmlState->hasAttribute("arrayType"))
+//                array2sh_setArrayType(hA2sh, xmlState->getIntAttribute("arrayType", 1));
+//            if(xmlState->hasAttribute("weightType"))
+//                array2sh_setWeightType(hA2sh, xmlState->getIntAttribute("weightType", 1));
             if(xmlState->hasAttribute("filterType"))
                 array2sh_setFilterType(hA2sh, xmlState->getIntAttribute("filterType", 3));
             if(xmlState->hasAttribute("regPar"))
@@ -446,18 +431,23 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
                 array2sh_setChOrder(hA2sh, xmlState->getIntAttribute("chOrder", 1));
             if(xmlState->hasAttribute("normType"))
                 array2sh_setNormType(hA2sh, xmlState->getIntAttribute("normType", 1));
-            if(xmlState->hasAttribute("c"))
-                array2sh_setc(hA2sh, (float)xmlState->getDoubleAttribute("c", 343.0));
+//            if(xmlState->hasAttribute("c"))
+//                array2sh_setc(hA2sh, (float)xmlState->getDoubleAttribute("c", 343.0));
             if(xmlState->hasAttribute("gain"))
                 array2sh_setGain(hA2sh, (float)xmlState->getDoubleAttribute("gain", 0.0));
             //if(xmlState->hasAttribute("maxFreq"))
             //    array2sh_setMaxFreq(hA2sh, (float)xmlState->getDoubleAttribute("maxFreq", 20000.0));
-            if(xmlState->hasAttribute("enableDiffPastAliasing"))
-                array2sh_setDiffEQpastAliasing(hA2sh, xmlState->getIntAttribute("enableDiffPastAliasing", 0));
+//            if(xmlState->hasAttribute("enableDiffPastAliasing"))
+//                array2sh_setDiffEQpastAliasing(hA2sh, 0); // xmlState->getIntAttribute("enableDiffPastAliasing", 0));
             
-            if(xmlState->hasAttribute("JSONFilePath"))
-                lastDir = xmlState->getStringAttribute("JSONFilePath", "");
+            if(xmlState->hasAttribute("CfgFilePath"))
+                lastDir = xmlState->getStringAttribute("CfgFilePath", "");
             
+            if(xmlState->hasAttribute("CfgFileName")) {
+                lastCfgFile = xmlState->getStringAttribute("CfgFileName", "");
+                sarita.readConfigFile(lastCfgFile.getFullPathName().getCharPointer());
+                sarita.updateArrayData(hA2sh);
+            }
             array2sh_refreshSettings(hA2sh);
         }
     }
@@ -491,48 +481,17 @@ void PluginProcessor::saveConfigurationToFile (File destination)
     Result result = ConfigurationHelper::writeConfigurationToFile (destination, var (jsonObj));
 }
 
-/* Adapted from the AllRADecoder by Daniel Rudrich, (c) 2017 (GPLv3 license) */
+/*   */
 void PluginProcessor::loadConfiguration (const File& configFile)
 {
-    int channelIDs[MAX_NUM_CHANNELS+1] = {0};
-    int virtual_channelIDs[MAX_NUM_CHANNELS+1] = {0};
-    sensors.removeAllChildren(nullptr);
-    Result result = ConfigurationHelper::parseFileForGenericLayout (configFile, sensors, nullptr);
-    if(result.wasOk()){
-        int num_sensors, num_virtual_sensors, sensor_idx, jj;
-        num_sensors = num_virtual_sensors = sensor_idx = jj = 0;
-        /* get Channel IDs and find number of directions and virtual directions */
-        for (ValueTree::Iterator it = sensors.begin(); it != sensors.end(); ++it){
-            if ( !((*it).getProperty("Imaginary"))){
-                num_sensors++; channelIDs[jj] = (*it).getProperty("Channel");
-            }
-            else{
-                virtual_channelIDs[num_virtual_sensors] = (*it).getProperty("Channel");
-                num_virtual_sensors++; channelIDs[jj] = -1;
-            }
-            jj++;
-        }
-        /* remove virtual channels and shift the channel indices down */
-        for(int i=0; i<num_virtual_sensors; i++)
-            for(int j=0; j<num_sensors+num_virtual_sensors; j++)
-                if(channelIDs[j] == -1)
-                    for(int k=j; k<num_sensors+num_virtual_sensors; k++)
-                        channelIDs[k] = channelIDs[k+1];
-        
-        /* then decriment the channel IDs to remove the gaps */
-        for(int i=0; i<num_virtual_sensors; i++)
-            for(int j=0; j<num_sensors+num_virtual_sensors; j++)
-                if( channelIDs[j] > virtual_channelIDs[i]-i )
-                    channelIDs[j]--;
-        
-        /* update with the new configuration  */
-        array2sh_setNumSensors(hA2sh, num_sensors);
-        for (ValueTree::Iterator it = sensors.begin() ; it != sensors.end(); ++it){
-            if ( !((*it).getProperty("Imaginary"))){
-                array2sh_setSensorAzi_deg(hA2sh, channelIDs[sensor_idx]-1, (*it).getProperty("Azimuth"));
-                array2sh_setSensorElev_deg(hA2sh, channelIDs[sensor_idx]-1, (*it).getProperty("Elevation"));
-                sensor_idx++;
-            }
-        }
-    }
+    if (!configFile.existsAsFile())
+        return;
+    
+    lastCfgFile = configFile;
+    const char *p = configFile.getFullPathName().getCharPointer();
+    if(sarita.setupSarita(p, nHostBlockSize, nNumInputs) == -1)
+        return; // config error
+    
+    sarita.updateArrayData(hA2sh);
 }
+
