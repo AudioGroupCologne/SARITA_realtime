@@ -886,7 +886,7 @@ void PluginEditor::comboBoxChanged (juce::ComboBox* comboBoxThatHasChanged)
         String txt = overlapCB->getItemText(overlapCB->getSelectedItemIndex());
         String sub = txt.upToFirstOccurrenceOf(" ", false, true);
         float val = sub.getFloatValue();
-        val = jlimit(0.f, 50.f, val);
+        val = jlimit(0.f, 49.f, val);
         hVst->sarita.setOverlap(val);
         //[/UserComboBoxCode_overlapCB]
     }

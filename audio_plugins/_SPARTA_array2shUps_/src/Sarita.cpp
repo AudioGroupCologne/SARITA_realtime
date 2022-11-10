@@ -133,6 +133,10 @@ void Sarita::updateOverlap(int blocksize)
 int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
 {
     configError = true;
+    
+    while(frameDone == false)
+        ;
+    
     deallocBuffers();
 
     if(readConfigFile(path) < 0)

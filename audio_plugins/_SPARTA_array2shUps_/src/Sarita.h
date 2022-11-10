@@ -205,6 +205,7 @@ public:
     float*** outputBuffer = NULL;
     float** outData = NULL;
     bool configError = true;
+    bool frameDone = true;
     int bufferNum = 0; // double buffer 0/1
 
 private:

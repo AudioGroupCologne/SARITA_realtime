@@ -249,6 +249,9 @@ void PluginProcessor::changeProgramName (int /*index*/, const String& /*newName*
 
 void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    bool sampleRateChanged = nSampleRate != sampleRate;
+    bool blocksizeChanged = nHostBlockSize != samplesPerBlock;
+
     nHostBlockSize = samplesPerBlock;
     nNumInputs =  getTotalNumInputChannels();
     nNumOutputs =  getTotalNumOutputChannels();
@@ -256,7 +259,8 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     array2sh_init(hA2sh, nSampleRate);
     
-    loadConfiguration(lastCfgFile);
+    if (sarita.configError == true || sampleRateChanged || blocksizeChanged)
+        loadConfiguration(lastCfgFile);
     
 #ifdef TEST_AUDIO_OUTPUT
     AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall);
@@ -279,6 +283,7 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
 //    float* pFrameData[MAX_NUM_CHANNELS];
     int frameSize = array2sh_getFrameSize();
     
+    sarita.frameDone = false;
     if (sarita.overlapChanged) {
         sarita.updateOverlap(nHostBlockSize);
     }
@@ -347,6 +352,7 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         else {
             buffer.clear();
         }
+        sarita.frameDone = true;
     }
 }
 
