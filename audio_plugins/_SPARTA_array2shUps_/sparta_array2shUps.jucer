@@ -344,7 +344,7 @@
         <CONFIGURATION name="Release" isDebug="0" optimisation="3" targetName="sparta_array2shUps"
                        binaryPath="" headerPath="../../../../../SDKs/Spatial_Audio_Framework/framework/include&#10;../../../../../SDKs/Spatial_Audio_Framework/examples/include&#10;../../../../../SDKs/VST2_SDK&#10;/opt/intel/oneapi/mkl/latest/include&#10;/opt/intel/oneapi/ipp/latest/include"
                        osxArchitecture="Native" osxCompatibility="10.10 SDK" enablePluginBinaryCopyStep="1"
-                       linkTimeOptimisation="1" macOSDeploymentTarget="10.10"/>
+                       linkTimeOptimisation="1" macOSDeploymentTarget="10.10" libraryPath="/opt/intel/oneapi/mkl/latest/lib&#10;/opt/intel/oneapi/ipp/latest/lib"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_opengl" path="../../SDKs/JUCE/modules/"/>

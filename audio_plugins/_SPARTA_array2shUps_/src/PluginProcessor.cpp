@@ -278,10 +278,6 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
     int nCurrentBlockSize = buffer.getNumSamples();
     nNumInputs = jmin(getTotalNumInputChannels(), buffer.getNumChannels());
     nNumOutputs = jmin(getTotalNumOutputChannels(), buffer.getNumChannels());
-
-    float** bufferData = buffer.getArrayOfWritePointers();
-//    float* pFrameData[MAX_NUM_CHANNELS];
-    int frameSize = array2sh_getFrameSize();
     
     sarita.frameDone = false;
     if (sarita.overlapChanged) {
@@ -338,14 +334,23 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         /*
          * process array2sh with dense grid
          */
+        float** bufferData = buffer.getArrayOfWritePointers();
+        float* pFrameData[MAX_NUM_CHANNELS];
+        int frameSize = array2sh_getFrameSize();
+        
         if ((sarita.output->bufferedBytes >= nHostBlockSize) && (nHostBlockSize % frameSize == 0)) { /* buffer filled and blocksize divisible by frame size */
             for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
                 for (int ch = 0; ch < sarita.denseGridSize /*sarita.output->numChannels()*/; ch++) {
                     // copy to array2Sh processing buffer
                     sarita.output->pop(sarita.outData[ch], ch, frameSize);
                 }
+                
+                for (int ch = 0; ch < nNumOutputs; ch++) {
+                    pFrameData[ch] = &bufferData[ch][frame*frameSize];
+                }
+                
                 /* perform processing and write to AudioSampleBuffer */
-                array2sh_process(hA2sh, sarita.outData, bufferData, sarita.denseGridSize, nNumOutputs, frameSize);
+                array2sh_process(hA2sh, sarita.outData, pFrameData, sarita.denseGridSize, nNumOutputs, frameSize);
             }
         }
 #endif
