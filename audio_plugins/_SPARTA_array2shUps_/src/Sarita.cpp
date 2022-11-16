@@ -134,7 +134,7 @@ int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
 {
     configError = true;
     
-    while(frameDone == false)
+//    while(frameDone == false)
         ;
     
     deallocBuffers();
@@ -162,7 +162,7 @@ int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
     shiftBuffer = (float**)calloc2d(denseGridSize, maxShiftOverall, sizeof(float));
     outData = (float**)calloc2d(denseGridSize, blocksize, sizeof(float));
 
-    input = new RingBuffer(64, bufferSize); // FIXME: matching channel num
+    input = new RingBuffer(numInputCount, bufferSize); // FIXME: matching channel num
     output = new RingBuffer(denseGridSize, bufferSize);
 
     currentTimeShift = (int*)malloc(idxNeighborsDenseLen * sizeof(int)); // TODO: correct size?
