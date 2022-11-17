@@ -80,6 +80,7 @@ public:
     }
     
     Sarita sarita; // FIXME: make private?
+    File newCfgFile;
 
 private:
     void* hA2sh;           /* array2sh handle */

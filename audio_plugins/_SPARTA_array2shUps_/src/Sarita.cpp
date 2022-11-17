@@ -134,15 +134,12 @@ int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
 {
     configError = true;
     
-//    while(frameDone == false)
-        ;
-    
     deallocBuffers();
 
     if(readConfigFile(path) < 0)
         return -1;
     
-    bufferSize = 2*blocksize; //  (2 - SARITA_OVERLAP)*blockSize;
+    bufferSize = 2*blocksize; // (2 - SARITA_OVERLAP)*blockSize;
     updateOverlap(blocksize);
 
     // allocate buffers
@@ -153,7 +150,7 @@ int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
     tmpXcorrBuffer = ippsMalloc_8u(tmpXcorrBufferSize);
     correlation = ippsMalloc_32f(blocksize * 2);
 
-    sparseBuffer = (float***)calloc3d(2, 64/*FIXME*/, blocksize, sizeof(float));
+    sparseBuffer = (float**)calloc2d(64 /* max input count */, blocksize, sizeof(float));
     // over sized for shifted samples
     denseBuffer = (float***)calloc3d(2, denseGridSize, blocksize+maxShiftOverall, sizeof(float));
     outputBuffer = (float***)calloc3d(2, denseGridSize, blocksize, sizeof(float));
@@ -204,13 +201,13 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
 {
     // apply hann window
     for (int ch=0; ch<numInputChannels; ch++) {
-        input->popWithOverlap(sparseBuffer[0][ch], ch, blocksize, overlapSize); // TODO: maybe no double buffer needed here
-        ippsMul_32f_I(hannWin, sparseBuffer[0][ch], blocksize);
+        input->popWithOverlap(sparseBuffer[ch], ch, blocksize, overlapSize);
+        ippsMul_32f_I(hannWin, sparseBuffer[ch], blocksize);
     }
 
     // in each frame the cross-correlation required for the upsampling are determined
     uint8_t n1, n2;
-    int maxSensors = denseGridSize;
+    int maxSensors = 64; // denseGridSize;
     for (int n=0; n<neighborCombLength; n++) {
         n1 = neighborCombinations[n][0] - 1;
         n2 = neighborCombinations[n][1] - 1;
@@ -222,7 +219,7 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
         IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
 
         // ipp correlates the reverse way compared to Matlab
-        ippsCrossCorrNorm_32f(sparseBuffer[0][n2], blocksize, sparseBuffer[0][n1], blocksize, xcorrBuffer[n], xcorrLen, -blocksize+1, funCfgNormNo, tmpXcorrBuffer); // performs best, switches to fft calc at higher block sizes
+        ippsCrossCorrNorm_32f(sparseBuffer[n2], blocksize, sparseBuffer[n1], blocksize, xcorrBuffer[n], xcorrLen, -blocksize+1, funCfgNormNo, tmpXcorrBuffer); // performs best, switches to fft calc at higher block sizes
     }
 
     int neighborsIndexCounter=0; // Counter which entry in combination_ptr is to be assessed
@@ -265,7 +262,7 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
             // currentBlock = neighborsIRs(nodeIndex, :) * weights(nodeIndex);
             int idx = idxNeighborsDense[nodeIndex][dirIdx]-1;
             float w = weightsNeighborsDense[nodeIndex][dirIdx];
-            ippsMulC_32f(sparseBuffer[0][idx], w, currentBlock, blocksize);
+            ippsMulC_32f(sparseBuffer[idx], w, currentBlock, blocksize);
 
             int timeShiftFinal = round(-timeShiftMean + currentTimeShift[nodeIndex] + maxShiftOverall); // As maxShiftOverall is added, timeShiftFinal will always be positive
             timeShiftFinal = (timeShiftFinal < 0) ? 0: timeShiftFinal; // Added 22.12.2021 to assure that timeShiftFinal does not become negative

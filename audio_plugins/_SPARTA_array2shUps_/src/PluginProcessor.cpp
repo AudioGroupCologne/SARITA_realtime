@@ -279,9 +279,13 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
     nNumInputs = jmin(getTotalNumInputChannels(), buffer.getNumChannels());
     nNumOutputs = jmin(getTotalNumOutputChannels(), buffer.getNumChannels());
     
-    sarita.frameDone = false;
     if (sarita.overlapChanged) {
         sarita.updateOverlap(nHostBlockSize);
+    }
+    else if(sarita.wantsConfigUpdate) {
+        sarita.wantsConfigUpdate = false;
+        DBG("load cfg");
+        loadConfiguration(newCfgFile);
     }
     
     // if config file read is not successful
@@ -319,15 +323,14 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         // test output
 #ifdef TEST_AUDIO_OUTPUT
         if (sarita.output->bufferedBytes >= nHostBlockSize) {
-            for (int ch = 0; ch<buffer.getNumChannels(); ch++) {
+            int numCh = juce::jmin((int)buffer.getNumChannels(), (int)sarita.denseGridSize);
+            for (int ch = 0; ch<numCh; ch++) {
                 float* channelData = buffer.getWritePointer(ch);
                 sarita.output->pop(channelData, ch, nHostBlockSize);
             }
-            // pop all ring buffer channels
-            float devnull[8192];
-            if (buffer.getNumChannels() < sarita.denseGridSize) {
-                for (int ch=buffer.getNumChannels(); ch<sarita.denseGridSize; ch++)
-                    sarita.output->pop(devnull, ch, nHostBlockSize);
+            // increase read index cause not all ring buffer channels are used
+            if ((int)buffer.getNumChannels() < (int)sarita.denseGridSize) {
+                sarita.output->skipPop(nHostBlockSize);
             }
         }
 #else
@@ -345,6 +348,7 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
                     sarita.output->pop(sarita.outData[ch], ch, frameSize);
                 }
                 
+                // gather channel pointers to output buffer
                 for (int ch = 0; ch < nNumOutputs; ch++) {
                     pFrameData[ch] = &bufferData[ch][frame*frameSize];
                 }
@@ -357,7 +361,6 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         else {
             buffer.clear();
         }
-        sarita.frameDone = true;
     }
 }
 

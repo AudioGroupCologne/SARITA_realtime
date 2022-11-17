@@ -78,6 +78,17 @@ public:
         bufferedBytes = 0;
     }
     
+    void skipPop(int len) {
+        bufferedBytes -= len;
+        readIdx += len;
+        readIdx %= size;
+    }
+    
+    void skipPush(int len) {
+        bufferedBytes += len;
+        writeIdx += len;
+        writeIdx %= size;
+    }
     
     RingBuffer(int channels, int bufferSize)
     {
@@ -200,12 +211,12 @@ public:
 
     RingBuffer *input;
     RingBuffer *output;
-    float*** sparseBuffer = NULL; // audio of source grid
+    float** sparseBuffer = NULL; // audio of source grid
     float*** denseBuffer = NULL; // audio of upsampled target grid
     float*** outputBuffer = NULL;
     float** outData = NULL;
     bool configError = true;
-    bool frameDone = true;
+    bool wantsConfigUpdate = false;
     int bufferNum = 0; // double buffer 0/1
 
 private:

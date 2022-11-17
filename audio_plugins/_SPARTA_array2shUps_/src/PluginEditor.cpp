@@ -941,7 +941,8 @@ void PluginEditor::buttonClicked (juce::Button* buttonThatWasClicked)
             auto file = fc.getResult();
             if (file != File{}){
                 hVst->setLastDir(file.getParentDirectory());
-                hVst->loadConfiguration (file);
+                hVst->newCfgFile = file;
+                hVst->sarita.wantsConfigUpdate = true;
             }
         });
         //[/UserButtonCode_tb_loadCfg]
@@ -962,6 +963,12 @@ void PluginEditor::timerCallback(int timerID)
             break;
 
         case TIMER_GUI_RELATED:
+//            if (hVst->sarita.wantsConfigUpdate == true) {
+//                while(hVst->sarita.frameDone)
+//                    ;
+//                hVst->loadConfiguration (file);
+//            }
+            
             /* parameters whos values can change internally should be periodically refreshed */
             int curOrder = CBencodingOrder->getSelectedId();
                        if(CBencodingOrder->getSelectedId()!=array2sh_getEncodingOrder(hA2sh))
