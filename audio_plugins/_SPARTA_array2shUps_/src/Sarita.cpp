@@ -92,11 +92,12 @@ void Sarita::hannWindow(int len, int overlap)
 void Sarita::deallocBuffers()
 {
     if (sparseBuffer != NULL) {
+        free(sparseBuffer);
+        sparseBuffer = nullptr;
         ippsFree(tmpXcorrBuffer);
         ippsFree(correlation);
         ippsFree(currentBlock);
         free(currentTimeShift);
-        free(sparseBuffer);
         free(denseBuffer);
         free(outputBuffer);
         free(xcorrBuffer);
@@ -207,8 +208,8 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
 
     // in each frame the cross-correlation required for the upsampling are determined
     uint8_t n1, n2;
-    int maxSensors = 64; // denseGridSize;
-    for (int n=0; n<neighborCombLength; n++) {
+    int maxSensors = denseGridSize;
+    for (uint32_t n=0; n<neighborCombLength; n++) {
         n1 = neighborCombinations[n][0] - 1;
         n2 = neighborCombinations[n][1] - 1;
         // safety limit to max num channels. TODO: Assert?
@@ -223,7 +224,7 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
     }
 
     int neighborsIndexCounter=0; // Counter which entry in combination_ptr is to be assessed
-    for (int dirIdx=0; dirIdx<denseGridSize; dirIdx++) {
+    for (uint32_t dirIdx=0; dirIdx<denseGridSize; dirIdx++) {
         currentTimeShift[0] = 0;
         float timeShiftMean = 0;
 
@@ -249,9 +250,11 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
             currentTimeShift[nodeIndex] = (maxPos - (shiftLen + 1) / 2);
             timeShiftMean += currentTimeShift[nodeIndex] * weightsNeighborsDense[nodeIndex][dirIdx];
         }
-
+        
+        // memzero fixes crackle
+        memset(denseBuffer[bufferNum][dirIdx], 0, overlapSize);
         // zero dense buffer at the end
-        ippsZero_32f(&denseBuffer[bufferNum][dirIdx][blocksize], maxShiftOverall);
+        ippsZero_32f(&denseBuffer[bufferNum][dirIdx][blocksize-maxShiftOverall], maxShiftOverall);
         // copy last out-of-frame samples to denseBuffer
         ippsCopy_32f(shiftBuffer[dirIdx], denseBuffer[bufferNum][dirIdx], maxShiftOverall);
         // zero shift buffer

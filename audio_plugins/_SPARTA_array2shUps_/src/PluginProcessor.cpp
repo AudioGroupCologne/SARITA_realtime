@@ -259,8 +259,10 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     array2sh_init(hA2sh, nSampleRate);
     
-    if (sarita.configError == true || sampleRateChanged || blocksizeChanged)
-        loadConfiguration(lastCfgFile);
+    if (sarita.configError == true || sampleRateChanged || blocksizeChanged) {
+        newCfgFile = lastCfgFile;
+        sarita.wantsConfigUpdate = true;
+    }
     
 #ifdef TEST_AUDIO_OUTPUT
     AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall);
@@ -305,16 +307,16 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
             sarita.processFrame(nCurrentBlockSize, nNumInputs);
 
             // add overlapping part of current frame to last frame end
-            for (int ch=0; ch<sarita.denseGridSize; ch++) {
-                int overlapIdx = juce::jmax(nCurrentBlockSize-sarita.overlapSize, 0);
+            int overlapIdx = juce::jmax(nCurrentBlockSize-sarita.overlapSize, 0);
+            for (uint32_t ch=0; ch<sarita.denseGridSize; ch++) {
                 utility_svvadd(&sarita.denseBuffer[sarita.bufferNum][ch][0], &sarita.denseBuffer[!sarita.bufferNum][ch][overlapIdx], sarita.overlapSize, sarita.outputBuffer[sarita.bufferNum][ch]);
             }
             // copy last overlap to output ring buffer
-            for (int ch=0; ch<sarita.denseGridSize ; ch++) {
+            for (uint32_t ch=0; ch<sarita.denseGridSize ; ch++) {
                 sarita.output->push(sarita.outputBuffer[sarita.bufferNum][ch], sarita.overlapSize, ch);
             }
             // copy non overlapping part to output ring buffer
-            for (int ch=0; ch<sarita.denseGridSize; ch++) {
+            for (uint32_t ch=0; ch<sarita.denseGridSize; ch++) {
                 sarita.output->push(&sarita.denseBuffer[sarita.bufferNum][ch][sarita.overlapSize], nHostBlockSize-2*sarita.overlapSize, ch);
             }
             sarita.bufferNum ^= 1; // swap buffer
@@ -323,13 +325,13 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         // test output
 #ifdef TEST_AUDIO_OUTPUT
         if (sarita.output->bufferedBytes >= nHostBlockSize) {
-            int numCh = juce::jmin((int)buffer.getNumChannels(), (int)sarita.denseGridSize);
-            for (int ch = 0; ch<numCh; ch++) {
+            uint32_t numCh = juce::jmin((int)buffer.getNumChannels(), (int)sarita.denseGridSize);
+            for (uint32_t ch = 0; ch<numCh; ch++) {
                 float* channelData = buffer.getWritePointer(ch);
                 sarita.output->pop(channelData, ch, nHostBlockSize);
             }
             // increase read index cause not all ring buffer channels are used
-            if ((int)buffer.getNumChannels() < (int)sarita.denseGridSize) {
+            if ((uint32_t)buffer.getNumChannels() < (uint32_t)sarita.denseGridSize) {
                 sarita.output->skipPop(nHostBlockSize);
             }
         }
@@ -343,9 +345,11 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         
         if ((sarita.output->bufferedBytes >= nHostBlockSize) && (nHostBlockSize % frameSize == 0)) { /* buffer filled and blocksize divisible by frame size */
             for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
-                for (int ch = 0; ch < sarita.denseGridSize /*sarita.output->numChannels()*/; ch++) {
+                for (int ch = 0; ch < (int)sarita.output->numChannels(); ch++) {
                     // copy to array2Sh processing buffer
                     sarita.output->pop(sarita.outData[ch], ch, frameSize);
+                    // normalize sh transform input
+                    ippsMulC_32f_I(1.f/sarita.denseGridSize, sarita.outData[ch], frameSize); // FIXME: find correct value
                 }
                 
                 // gather channel pointers to output buffer
