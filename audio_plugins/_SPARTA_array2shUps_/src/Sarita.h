@@ -37,7 +37,7 @@
 #include "array2sh.h"
 #include "../src/array2sh/array2sh_internal.h"
 
-//#define TEST_AUDIO_OUTPUT
+#define TEST_AUDIO_OUTPUT
 
 static std::unique_ptr<juce::FileLogger> flogger;
 

@@ -12,7 +12,10 @@
 int Sarita::readConfigFile(const char* path)
 {
     FILE* configFile = fopen(path, "rb");
-
+    
+    if (!configFile)
+        return -1;
+    
     /* read config file header data
      * fs, order, maxShiftOverall, ...
      */

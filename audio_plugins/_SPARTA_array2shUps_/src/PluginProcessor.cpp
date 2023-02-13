@@ -463,7 +463,8 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
             
             if(xmlState->hasAttribute("CfgFileName")) {
                 lastCfgFile = xmlState->getStringAttribute("CfgFileName", "");
-                sarita.readConfigFile(lastCfgFile.getFullPathName().getCharPointer());
+                if(sarita.readConfigFile(lastCfgFile.getFullPathName().getCharPointer()) < 0);
+                    return;
                 sarita.updateArrayData(hA2sh);
             }
             array2sh_refreshSettings(hA2sh);
