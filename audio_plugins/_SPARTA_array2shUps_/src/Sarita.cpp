@@ -250,7 +250,7 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
             int shiftLen = 2*maxShift+1; // TODO: correct?
             Ipp32f maxVal; // unused
             ippsMaxIndx_32f(&correlation[lowestLagIdx], shiftLen, &maxVal, &maxPos);
-            currentTimeShift[nodeIndex] = (maxPos - (shiftLen + 1) / 2);
+            currentTimeShift[nodeIndex] = (1 + maxPos - (shiftLen + 1) / 2);
             timeShiftMean += currentTimeShift[nodeIndex] * weightsNeighborsDense[nodeIndex][dirIdx];
         }
         
