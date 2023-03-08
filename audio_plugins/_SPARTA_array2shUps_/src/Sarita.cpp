@@ -82,9 +82,13 @@ void Sarita::hannWindow(int len, int overlap)
     hannWin = (float*) malloc(len * sizeof(float));
     float *tmpWin = (float*) malloc(overlap*2 * sizeof(float));
 
-#ifdef SAF_USE_APPLE_ACCELERATE
-	
-#else
+	#ifdef SAF_USE_APPLE_ACCELERATE
+	vDSP_hann_window(tmpWin, overlap*2, 0);
+	float value = 1.f;
+	vDSP_vfill(&value, hannWin, 1, len);
+	cblas_scopy(overlap, tmpWin, 1, hannWin, 1);
+	cblas_scopy(overlap, &tmpWin[overlap], 1, &hannWin[len-overlap], 1);
+	#else
     // ippsSet_32f & ippsWinHann_32f_I was added to custom saf ipp list!
     ippsSet_32f(1, tmpWin, overlap*2);
     ippsWinHann_32f_I(tmpWin, overlap*2);
@@ -92,7 +96,7 @@ void Sarita::hannWindow(int len, int overlap)
     ippsSet_32f(1, hannWin, len);
     ippsCopy_32f(tmpWin, hannWin, overlap); // ramp up
     ippsCopy_32f(&tmpWin[overlap], &hannWin[len-overlap], overlap); // ramp down
-#endif
+	#endif
 	
 	free(tmpWin);
 }
@@ -102,13 +106,14 @@ void Sarita::deallocBuffers()
     if (sparseBuffer != NULL) {
         free(sparseBuffer);
         sparseBuffer = nullptr;
-#ifdef SAF_USE_APPLE_ACCELERATE
+		#ifdef SAF_USE_APPLE_ACCELERATE
 		free(tmpBuf);
-#else
+		free(correlation);
+		#else
         ippsFree(tmpXcorrBuffer);
         ippsFree(correlation);
         ippsFree(currentBlock);
-#endif
+		#endif
         free(currentTimeShift);
         free(denseBuffer);
         free(outputBuffer);
@@ -157,15 +162,15 @@ int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
 
     // allocate buffers
     xcorrLen = 2*blocksize-1;
-#ifdef SAF_USE_APPLE_ACCELERATE
-	
-#else
+	#ifdef SAF_USE_APPLE_ACCELERATE
+	correlation = (float*)malloc(blocksize * 2 * sizeof(float));
+	#else
     IppStatus stat;
     IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
     stat = ippsCrossCorrNormGetBufferSize(blocksize, blocksize, xcorrLen, -blocksize-1, ipp32f, funCfgNormNo, &tmpXcorrBufferSize);
     tmpXcorrBuffer = ippsMalloc_8u(tmpXcorrBufferSize);
     correlation = ippsMalloc_32f(blocksize * 2);
-#endif
+	#endif
 	
     sparseBuffer = (float**)calloc2d(64 /* max input count */, blocksize, sizeof(float));
     // over sized for shifted samples
@@ -180,12 +185,12 @@ int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
     output = new RingBuffer(denseGridSize, bufferSize);
 
     currentTimeShift = (int*)malloc(idxNeighborsDenseLen * sizeof(int)); // TODO: correct size?
-#ifdef SAF_USE_APPLE_ACCELERATE
+	#ifdef SAF_USE_APPLE_ACCELERATE
 	currentBlock = (float*)malloc(blocksize * sizeof(float));
 	tmpBuf = (float*)malloc(blocksize * sizeof(float));
-#else
+	#else
     currentBlock = ippsMalloc_32f(blocksize);
-#endif
+	#endif
 	
     configError = false;
     return 0;
@@ -224,13 +229,13 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
     // apply hann window
     for (int ch=0; ch<numInputChannels; ch++) {
         input->popWithOverlap(sparseBuffer[ch], ch, blocksize, overlapSize);
-#ifdef SAF_USE_APPLE_ACCELERATE
+		#ifdef SAF_USE_APPLE_ACCELERATE
 		vDSP_vmul(hannWin, 1, sparseBuffer[ch], 1, tmpBuf, 1, blocksize);
 //		memcpy(sparseBuffer[ch], tmpBuf, blocksize * sizeof(float));
 		cblas_scopy(blocksize, tmpBuf, 1, sparseBuffer[ch], 1);
-#else
+		#else
 		ippsMul_32f_I(hannWin, sparseBuffer[ch], blocksize);
-#endif
+		#endif
     }
 
     // in each frame the cross-correlation required for the upsampling are determined
@@ -243,13 +248,13 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
         n1 = n1 >= maxSensors? maxSensors-1 : n1;
         n2 = n2 >= maxSensors? maxSensors-1 : n2;
         // cxcorr(processingBuffer[BufferNum][n1], processingBuffer[BufferNum][n2], xcorrBuffer[n], blocksize, blocksize); // cpu hog
-#ifdef SAF_USE_APPLE_ACCELERATE
+		#ifdef SAF_USE_APPLE_ACCELERATE
 		 vDSP_conv(sparseBuffer[n1], 1, sparseBuffer[n2], 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
-#else
+		#else
         IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
         // ipp correlates the reverse way compared to Matlab
         ippsCrossCorrNorm_32f(sparseBuffer[n2], blocksize, sparseBuffer[n1], blocksize, xcorrBuffer[n], xcorrLen, -blocksize+1, funCfgNormNo, tmpXcorrBuffer); // performs best, switches to fft calc at higher block sizes
-#endif
+		#endif
     }
 
     int neighborsIndexCounter=0; // Counter which entry in combination_ptr is to be assessed
@@ -267,11 +272,11 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
             ippsCopy_32f(xcorrBuffer[x], correlation, xcorrLen);
 			#endif
             if (combinationsPtr[neighborsIndexCounter][1] == -1) {
-			#ifdef SAF_USE_APPLE_ACCELERATE
+				#ifdef SAF_USE_APPLE_ACCELERATE
 				vDSP_vrvrs(correlation, 1, xcorrLen); // reverse vector
-			#else
+				#else
                 ippsFlip_32f_I(correlation, xcorrLen);
-			#endif
+				#endif
             }
             neighborsIndexCounter++;
 
@@ -281,12 +286,15 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
             int lowestLagIdx = blocksize-maxShift;
             int maxPos;
             int shiftLen = 2*maxShift+1; // TODO: correct?
-#ifdef SAF_USE_APPLE_ACCELERATE
-			
-#else
+			#ifdef SAF_USE_APPLE_ACCELERATE
+			float maxVal;
+			vDSP_Length pos;
+			vDSP_maxvi(&correlation[lowestLagIdx], 1, &maxVal, &pos, shiftLen);
+			maxPos = (int) pos;
+			#else
             Ipp32f maxVal; // unused
             ippsMaxIndx_32f(&correlation[lowestLagIdx], shiftLen, &maxVal, &maxPos);
-#endif
+			#endif
             currentTimeShift[nodeIndex] = (1 + maxPos - (shiftLen + 1) / 2);
             timeShiftMean += currentTimeShift[nodeIndex] * weightsNeighborsDense[nodeIndex][dirIdx];
         }
@@ -294,14 +302,38 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
         // memzero fixes crackle
         memset(denseBuffer[bufferNum][dirIdx], 0, overlapSize);
 		
-#ifdef SAF_USE_APPLE_ACCELERATE
+		#ifdef SAF_USE_APPLE_ACCELERATE
 		// zero dense buffer at the end
 		vDSP_vclr(&denseBuffer[bufferNum][dirIdx][blocksize-maxShiftOverall], 1, maxShiftOverall);
 		// copy last out-of-frame samples to denseBuffer
 		cblas_scopy(maxShiftOverall, shiftBuffer[dirIdx], 1, denseBuffer[bufferNum][dirIdx], 1);
 		// zero shift buffer
 		vDSP_vclr(shiftBuffer[dirIdx], 1, maxShiftOverall);
-#else
+		// align every block according to the calculated time shift, weight and sum up
+		for (int nodeIndex=0; nodeIndex<numNeighbors; nodeIndex++) {
+			// currentBlock = neighborsIRs(nodeIndex, :) * weights(nodeIndex);
+			int idx = idxNeighborsDense[nodeIndex][dirIdx]-1;
+			float w = weightsNeighborsDense[nodeIndex][dirIdx];
+			vDSP_vsmul(sparseBuffer[idx], 1, &w, tmpBuf, 1, blocksize);
+			cblas_scopy(blocksize, tmpBuf, 1, sparseBuffer[idx], 1);
+
+			int timeShiftFinal = round(-timeShiftMean + currentTimeShift[nodeIndex] + maxShiftOverall); // As maxShiftOverall is added, timeShiftFinal will always be positive
+			timeShiftFinal = (timeShiftFinal < 0) ? 0: timeShiftFinal; // Added 22.12.2021 to assure that timeShiftFinal does not become negative
+
+			//drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
+			//drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
+			if (nodeIndex == 0) {
+				cblas_scopy(blocksize, currentBlock, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], 1);
+			}
+			else {
+				vDSP_vadd(currentBlock, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal] , 1, tmpBuf , 1, blocksize);
+				cblas_scopy(blocksize, tmpBuf, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], 1);
+			}
+		}
+
+		// save out-of-frame samples to shift buffer
+		cblas_scopy(maxShiftOverall, &denseBuffer[bufferNum][dirIdx][blocksize], 1, shiftBuffer[dirIdx], 1);
+		#else
         // zero dense buffer at the end
         ippsZero_32f(&denseBuffer[bufferNum][dirIdx][blocksize-maxShiftOverall], maxShiftOverall);
         // copy last out-of-frame samples to denseBuffer
@@ -330,6 +362,6 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
 
         // save out-of-frame samples to shift buffer
         ippsCopy_32f(&denseBuffer[bufferNum][dirIdx][blocksize], shiftBuffer[dirIdx], maxShiftOverall);
-#endif
+		#endif
     }
 }
