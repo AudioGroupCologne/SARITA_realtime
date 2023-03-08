@@ -21,8 +21,9 @@
 
 //[Headers]     -- You can add your own extra header files here --
 
-#include "JuceHeader.h"
 #include "PluginProcessor.h"
+#include "JuceHeader.h"
+
 //[/Headers]
 
 
@@ -35,7 +36,7 @@
     Describe your class and how it works here!
                                                                     //[/Comments]
 */
-class sensorCoordsView  : public Component,
+class sensorCoordsView  : public juce::Component,
                           public Slider::Listener
 {
 public:

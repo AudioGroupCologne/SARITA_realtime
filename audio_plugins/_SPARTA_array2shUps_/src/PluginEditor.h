@@ -21,12 +21,12 @@
 
 //[Headers]     -- You can add your own extra header files here --
 
-#include "JuceHeader.h"
 #include "PluginProcessor.h"
 #include "eqview.h"
 #include "anaview.h"
 #include "sensorCoordsView.h"
 #include "../../resources/SPARTALookAndFeel.h"
+#include "JuceHeader.h"
 
 typedef enum {
     SHOW_EQ = 1,

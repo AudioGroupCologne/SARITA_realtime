@@ -94,7 +94,7 @@ struct SPARTALookAndFeel    : public LookAndFeel_V4
         }
     }
 
-    void drawTickBox (Graphics& g, Component& component,
+    void drawTickBox (Graphics& g, juce::Component& component,
                       float x, float y, float w, float h,
                       bool ticked,
                       bool isEnabled,

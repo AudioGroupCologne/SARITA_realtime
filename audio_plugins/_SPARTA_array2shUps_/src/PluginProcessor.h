@@ -22,12 +22,12 @@
 #ifndef PLUGINPROCESSOR_H_INCLUDED
 #define PLUGINPROCESSOR_H_INCLUDED
 
-#include <JuceHeader.h>
 #include "array2sh.h"
 #include <thread>
+#include "Sarita.h"
+#include <JuceHeader.h>
 #define CONFIGURATIONHELPER_ENABLE_GENERICLAYOUT_METHODS 1
 #include "../../resources/ConfigurationHelper.h"
-#include "Sarita.h"
 
 #define BUILD_VER_SUFFIX ""   /* String to be added before the version name on the GUI (e.g. beta, alpha etc..) */ 
 #ifndef M_PI

@@ -31,12 +31,20 @@
 #ifndef sarita_h
 #define sarita_h
 
-#include <JuceHeader.h>
-#include "ipp.h"
+#ifdef SAF_USE_APPLE_ACCELERATE
+	#include <Accelerate/Accelerate.h>
+	#define FLOATTYPE float
+	#define BYTETYPE uint8_t
+#else
+	#include "ipp.h"
+	#define FLOATTYPE Ipp32f
+	#define BYTETYPE Ipp8u
+#endif
+//
 #include "saf.h"           /* Main include header for SAF */
 #include "array2sh.h"
 #include "../src/array2sh/array2sh_internal.h"
-
+#include <JuceHeader.h>
 #define TEST_AUDIO_OUTPUT
 
 static std::unique_ptr<juce::FileLogger> flogger;
@@ -224,14 +232,16 @@ private:
     // cross correlation buffers
     int xcorrLen;
     int tmpXcorrBufferSize;
-    Ipp8u* tmpXcorrBuffer = NULL;
-    Ipp32f* correlation;
+	BYTETYPE* tmpXcorrBuffer = NULL;
+	FLOATTYPE* correlation;
     float** xcorrBuffer;
 
-    Ipp32f *hannWin = NULL;
+	FLOATTYPE* hannWin = NULL;
     float** shiftBuffer;
     int* currentTimeShift;
-    Ipp32f* currentBlock;
+	FLOATTYPE* currentBlock;
+	
+	FLOATTYPE* tmpBuf;
 
     /*
     * binary file read helpers
