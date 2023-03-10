@@ -79,15 +79,15 @@ void Sarita::hannWindow(int len, int overlap)
 {
     if (hannWin)
         free(hannWin);
-    hannWin = (float*) malloc(len * sizeof(float));
-    float *tmpWin = (float*) malloc(overlap*2 * sizeof(float));
+    hannWin = (float*) calloc(len, sizeof(float));
+    float *tmpWin = (float*) calloc((1+overlap*2), sizeof(float));
 
 	#ifdef SAF_USE_APPLE_ACCELERATE
-	vDSP_hann_window(tmpWin, overlap*2, 0);
+	vDSP_hann_window(tmpWin, overlap*2+1, 0);
 	float value = 1.f;
 	vDSP_vfill(&value, hannWin, 1, len);
 	cblas_scopy(overlap, tmpWin, 1, hannWin, 1);
-	cblas_scopy(overlap, &tmpWin[overlap], 1, &hannWin[len-overlap], 1);
+	cblas_scopy(overlap, &tmpWin[overlap+1], 1, &hannWin[len-overlap], 1);
 	#else
     // ippsSet_32f & ippsWinHann_32f_I was added to custom saf ipp list!
     ippsSet_32f(1, tmpWin, overlap*2);
@@ -249,7 +249,9 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
         n2 = n2 >= maxSensors? maxSensors-1 : n2;
         // cxcorr(processingBuffer[BufferNum][n1], processingBuffer[BufferNum][n2], xcorrBuffer[n], blocksize, blocksize); // cpu hog
 		#ifdef SAF_USE_APPLE_ACCELERATE
-		 vDSP_conv(sparseBuffer[n1], 1, sparseBuffer[n2], 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
+		cblas_scopy(blocksize, sparseBuffer[n2], 1, tmpBuf, 1);
+		vDSP_vrvrs(tmpBuf, 1, blocksize); // reverse vector
+		vDSP_conv(sparseBuffer[n1 ], 1, tmpBuf, 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
 		#else
         IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
         // ipp correlates the reverse way compared to Matlab
@@ -313,9 +315,8 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
 		for (int nodeIndex=0; nodeIndex<numNeighbors; nodeIndex++) {
 			// currentBlock = neighborsIRs(nodeIndex, :) * weights(nodeIndex);
 			int idx = idxNeighborsDense[nodeIndex][dirIdx]-1;
-			float w = weightsNeighborsDense[nodeIndex][dirIdx];
-			vDSP_vsmul(sparseBuffer[idx], 1, &w, tmpBuf, 1, blocksize);
-			cblas_scopy(blocksize, tmpBuf, 1, sparseBuffer[idx], 1);
+			const float w = weightsNeighborsDense[nodeIndex][dirIdx];
+			vDSP_vsmul(sparseBuffer[idx], 1, &w, currentBlock, 1, blocksize);
 
 			int timeShiftFinal = round(-timeShiftMean + currentTimeShift[nodeIndex] + maxShiftOverall); // As maxShiftOverall is added, timeShiftFinal will always be positive
 			timeShiftFinal = (timeShiftFinal < 0) ? 0: timeShiftFinal; // Added 22.12.2021 to assure that timeShiftFinal does not become negative
@@ -326,8 +327,9 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
 				cblas_scopy(blocksize, currentBlock, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], 1);
 			}
 			else {
-				vDSP_vadd(currentBlock, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal] , 1, tmpBuf , 1, blocksize);
-				cblas_scopy(blocksize, tmpBuf, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], 1);
+//				vDSP_vadd(currentBlock, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal] , 1, tmpBuf , 1, blocksize);
+//				cblas_scopy(blocksize, tmpBuf, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], 1);
+				cblas_saxpy(blocksize, 1.f, currentBlock, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], 1);
 			}
 		}
 
