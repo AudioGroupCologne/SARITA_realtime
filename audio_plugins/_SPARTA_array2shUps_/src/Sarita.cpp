@@ -6,6 +6,18 @@
 //  Copyright © 2022 TH Köln. All rights reserved.
 
 #include "Sarita.h"
+
+
+Sarita::Sarita()
+{
+    inputBuffer1.realp = NULL;
+    inputBuffer1.imagp = NULL;
+    inputBuffer2.realp = NULL;
+    inputBuffer2.imagp = NULL;
+    outputBuffer3.realp = NULL;
+    outputBuffer3.imagp = NULL;
+}
+
 /*
 * read config data from matlab workspace dump
 */
@@ -101,6 +113,47 @@ void Sarita::hannWindow(int len, int overlap)
 	free(tmpWin);
 }
 
+void Sarita::setupFFT(int blocksize) 
+{
+    log2n = log2(blocksize);
+    fftSetup = vDSP_create_fftsetup(log2n, kFFTRadix2);
+    
+    float *inBufReal1 = (float*)malloc(blocksize/2*sizeof(float));
+    float *inBufImag1 = (float*)malloc(blocksize/2*sizeof(float));
+    inputBuffer1.realp = inBufReal1;
+    inputBuffer1.imagp = inBufImag1;
+
+    float *inBufReal2 = (float*)malloc(blocksize/2*sizeof(float));
+    float *inBufImag2 = (float*)malloc(blocksize/2*sizeof(float));
+    inputBuffer2.realp = inBufReal2;
+    inputBuffer2.imagp = inBufImag2;
+    
+    float *outBufReal3 = (float*)malloc(blocksize*sizeof(float));
+    float *outBufImag3 = (float*)malloc(blocksize*sizeof(float));
+    outputBuffer3.realp = outBufReal3;
+    outputBuffer3.imagp = outBufImag3;
+}
+
+void Sarita::fftXcorr(float* buf1, float* buf2, float* xcorr, int blocksize)
+{
+    // pack input data to split complex array 
+    vDSP_ctoz((DSPComplex *) buf1, 2, &inputBuffer1, 1, blocksize/2);
+    vDSP_ctoz((DSPComplex *) buf2, 2, &inputBuffer2, 1, blocksize/2);
+    
+    vDSP_fft_zrip(fftSetup, &inputBuffer1, 1, log2n, FFT_FORWARD);
+    vDSP_fft_zrip(fftSetup, &inputBuffer2, 1, log2n, FFT_FORWARD);
+
+    // complex conjugate
+    vDSP_zvconj(&inputBuffer2, 1, &inputBuffer2, 1, blocksize/2);
+    // multiply with complex conjugate
+    vDSP_zvmul(&inputBuffer1, 1, &inputBuffer2, 1, &outputBuffer3, 1, blocksize, 1);
+    // inverse fft
+    vDSP_fft_zrip(fftSetup, &outputBuffer3, 1, log2n, FFT_INVERSE);
+    // unpack data to normal array
+    vDSP_ztoc(&outputBuffer3, 1, (DSPComplex *) xcorr, 2, blocksize/2);
+}
+
+
 void Sarita::deallocBuffers()
 {
     if (sparseBuffer != NULL) {
@@ -133,6 +186,19 @@ void Sarita::deallocBuffers()
         free(combinationsPtr);
         free(denseGrid);
     }
+    
+    #ifdef SAF_USE_APPLE_ACCELERATE
+    if (fftSetup)
+        vDSP_destroy_fftsetup(fftSetup);
+    
+    if (inputBuffer1.realp) free(inputBuffer1.realp);
+    if (inputBuffer1.imagp) free(inputBuffer1.imagp);
+    if (inputBuffer2.realp) free(inputBuffer2.realp);
+    if (inputBuffer2.imagp) free(inputBuffer2.imagp);
+    if (outputBuffer3.realp) free(outputBuffer3.realp);
+    if (outputBuffer3.imagp) free(outputBuffer3.imagp);
+    #endif
+    
 }
 
 void Sarita::setOverlap(float newOverlap)
@@ -163,6 +229,8 @@ int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
     // allocate buffers
     xcorrLen = 2*blocksize-1;
     #ifdef SAF_USE_APPLE_ACCELERATE
+    // fft for vDSP XCorr
+    setupFFT(blocksize);
     correlation = (float*)malloc(blocksize * 2 * sizeof(float));
     #else
     IppStatus stat;
@@ -249,9 +317,11 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
         n2 = n2 >= maxSensors? maxSensors-1 : n2;
         // cxcorr(processingBuffer[BufferNum][n1], processingBuffer[BufferNum][n2], xcorrBuffer[n], blocksize, blocksize); // cpu hog
         #ifdef SAF_USE_APPLE_ACCELERATE
-        cblas_scopy(blocksize, sparseBuffer[n1], 1, tmpBuf, 1);
+//        cblas_scopy(blocksize, sparseBuffer[n1], 1, tmpBuf, 1);
     //		vDSP_vrvrs(tmpBuf, 1, blocksize); // reverse vector
-        vDSP_conv(sparseBuffer[n2 ], 1, tmpBuf, 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
+//        vDSP_conv(sparseBuffer[n2 ], 1, tmpBuf, 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
+        fftXcorr(sparseBuffer[n2], sparseBuffer[n1], xcorrBuffer[n], blocksize);
+        
         #else
         IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
         // ipp correlates the reverse way compared to Matlab

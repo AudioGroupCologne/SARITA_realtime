@@ -178,12 +178,15 @@ class Sarita
 {
     
 public:
+    Sarita();
     void processFrame (int blocksize, int numInputChannels);
     void deallocBuffers();
     void setOverlap(float newOverlap);
     void updateOverlap(int blocksize);
     int setupSarita(const char* path, int blocksize, int numInputCount);
     void hannWindow(int len, int overlap);
+    void setupFFT(int blocksize);
+    void fftXcorr(float* buf1, float* buf2, float* xcorr, int blocksize);
     int readConfigFile(const char* path);
     
     // copy config data to array2sh structs
@@ -230,6 +233,14 @@ public:
 private:
     
     // cross correlation buffers
+    #ifdef SAF_USE_APPLE_ACCELERATE
+    FFTSetup fftSetup = NULL;
+    vDSP_Length log2n;
+    DSPSplitComplex inputBuffer1;
+    DSPSplitComplex inputBuffer2;
+    DSPSplitComplex outputBuffer3;
+    #endif
+    
     int xcorrLen;
     int tmpXcorrBufferSize;
 	BYTETYPE* tmpXcorrBuffer = NULL;
