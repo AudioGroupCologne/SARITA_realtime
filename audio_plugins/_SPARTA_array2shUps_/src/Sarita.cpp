@@ -245,7 +245,7 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
             // look for maximal value in the crosscorrelated IRs only in the relevant area
             // correlation = correlation(frame_length-maxShift(nodeIndex-1):frame_length+maxShift(nodeIndex-1));
             uint8_t maxShift = maxShiftDense[nodeIndex-1][dirIdx];
-            int lowestLagIdx = blocksize-maxShift;
+            int lowestLagIdx = blocksize-maxShift-1;
             int maxPos;
             int shiftLen = 2*maxShift+1; // TODO: correct?
             Ipp32f maxVal; // unused
