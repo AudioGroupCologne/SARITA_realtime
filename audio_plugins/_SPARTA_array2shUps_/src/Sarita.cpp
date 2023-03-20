@@ -10,12 +10,14 @@
 
 Sarita::Sarita()
 {
+    #ifdef SAF_USE_APPLE_ACCELERATE
     inputBuffer1.realp = NULL;
     inputBuffer1.imagp = NULL;
     inputBuffer2.realp = NULL;
     inputBuffer2.imagp = NULL;
     outputBuffer3.realp = NULL;
     outputBuffer3.imagp = NULL;
+    #endif
 }
 
 /*
@@ -113,6 +115,7 @@ void Sarita::hannWindow(int len, int overlap)
 	free(tmpWin);
 }
 
+#ifdef SAF_USE_APPLE_ACCELERATE
 void Sarita::setupFFT(int blocksize) 
 {
     log2n = log2(blocksize);
@@ -152,7 +155,7 @@ void Sarita::fftXcorr(float* buf1, float* buf2, float* xcorr, int blocksize)
     // unpack data to normal array
     vDSP_ztoc(&outputBuffer3, 1, (DSPComplex *) xcorr, 2, blocksize/2);
 }
-
+#endif
 
 void Sarita::deallocBuffers()
 {

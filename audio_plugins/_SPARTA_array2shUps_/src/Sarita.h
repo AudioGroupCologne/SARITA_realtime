@@ -185,8 +185,10 @@ public:
     void updateOverlap(int blocksize);
     int setupSarita(const char* path, int blocksize, int numInputCount);
     void hannWindow(int len, int overlap);
+    #ifdef SAF_USE_APPLE_ACCELERATE
     void setupFFT(int blocksize);
     void fftXcorr(float* buf1, float* buf2, float* xcorr, int blocksize);
+    #endif
     int readConfigFile(const char* path);
     
     // copy config data to array2sh structs
