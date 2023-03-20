@@ -317,11 +317,8 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
         n2 = n2 >= maxSensors? maxSensors-1 : n2;
         // cxcorr(processingBuffer[BufferNum][n1], processingBuffer[BufferNum][n2], xcorrBuffer[n], blocksize, blocksize); // cpu hog
         #ifdef SAF_USE_APPLE_ACCELERATE
-//        cblas_scopy(blocksize, sparseBuffer[n1], 1, tmpBuf, 1);
-    //		vDSP_vrvrs(tmpBuf, 1, blocksize); // reverse vector
-//        vDSP_conv(sparseBuffer[n2 ], 1, tmpBuf, 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
-        fftXcorr(sparseBuffer[n2], sparseBuffer[n1], xcorrBuffer[n], blocksize);
-        
+     // vDSP_conv(sparseBuffer[n2], 1, sparseBuffer[n1], 1, xcorrBuffer[n], 1, (blocksize), (blocksize)); // cpu hog at higher block sizes
+        fftXcorr(sparseBuffer[n2], sparseBuffer[n1], xcorrBuffer[n], blocksize); // M1: 0.1% vs 0.9% CPU (Debug)
         #else
         IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
         // ipp correlates the reverse way compared to Matlab
