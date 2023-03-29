@@ -232,9 +232,17 @@ public:
     bool wantsConfigUpdate = false;
     int bufferNum = 0; // double buffer 0/1
 
+    float** testBuffer = NULL;
+    float* xcorrBufferPadded = NULL;
+    
+    File logFile;
+    juce::FileLogger logger;
+    
 private:
     
-    // cross correlation buffers
+    int find_peak(float *coeffs, int coeffsize, float *maxVal);
+
+    // cross correlation buffersxc
     #ifdef SAF_USE_APPLE_ACCELERATE
     FFTSetup fftSetup = NULL;
     vDSP_Length log2n;
