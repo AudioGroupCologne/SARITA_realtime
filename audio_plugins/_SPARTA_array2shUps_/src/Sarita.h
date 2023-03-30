@@ -240,8 +240,6 @@ public:
     
 private:
     
-    int find_peak(float *coeffs, int coeffsize, float *maxVal);
-
     // cross correlation buffersxc
     #ifdef SAF_USE_APPLE_ACCELERATE
     FFTSetup fftSetup = NULL;
@@ -261,7 +259,6 @@ private:
     float** shiftBuffer;
     int* currentTimeShift;
 	FLOATTYPE* currentBlock;
-	
 	FLOATTYPE* tmpBuf;
 
     /*

@@ -148,14 +148,9 @@ void Sarita::setupFFT(int blocksize)
 
 void Sarita::fftXcorr(float* buf1, float* buf2, float* xcorr, int blocksize)
 {
-    vDSP_vclr(tmpBuf, 1, blocksize);
-    cblas_scopy(blocksize/2, buf1, 1, &tmpBuf[blocksize/2], 1);
     // pack input data to split complex array 
-    vDSP_ctoz((DSPComplex *) tmpBuf, 2, &inputBuffer1, 1, blocksize/2);
-    
-    vDSP_vclr(tmpBuf, 1, blocksize);
-    cblas_scopy(blocksize/2, buf2, 1, &tmpBuf[blocksize/2], 1);
-    vDSP_ctoz((DSPComplex *) tmpBuf, 2, &inputBuffer2, 1, blocksize/2);
+    vDSP_ctoz((DSPComplex *) buf1, 2, &inputBuffer1, 1, blocksize/2);
+    vDSP_ctoz((DSPComplex *) buf2, 2, &inputBuffer2, 1, blocksize/2);
     
     vDSP_fft_zrip(fftSetup, &inputBuffer1, 1, log2n, FFT_FORWARD);
     vDSP_fft_zrip(fftSetup, &inputBuffer2, 1, log2n, FFT_FORWARD);
@@ -171,7 +166,7 @@ void Sarita::fftXcorr(float* buf1, float* buf2, float* xcorr, int blocksize)
     vDSP_vsmul(outputBuffer3.realp, 1, &scale, outputBuffer3.realp, 1, blocksize/2);
     vDSP_vsmul(outputBuffer3.imagp, 1, &scale, outputBuffer3.imagp, 1, blocksize/2);
     // unpack data to normal array
-    vDSP_ztoc(&outputBuffer3, 1, (DSPComplex *) xcorr, 2, blocksize/2 + 5);
+    vDSP_ztoc(&outputBuffer3, 1, (DSPComplex *) xcorr, 2, blocksize/2);
 }
 #endif
 
@@ -255,14 +250,15 @@ int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
     updateOverlap(blocksize);
 
     // allocate buffers
-    xcorrLen = 2*blocksize-1;
     #ifdef SAF_USE_APPLE_ACCELERATE
+    xcorrLen = blocksize;
     // fft for vDSP XCorr
-    setupFFT(2*blocksize);
-    correlation = (float*)malloc(blocksize * 2 * sizeof(float));
+    setupFFT(blocksize);
+    correlation = (float*)malloc(xcorrLen * sizeof(float));
     // padded buffer for vDSP_conv
     xcorrBufferPadded = (float*)calloc((blocksize-1 + blocksize + blocksize-1), sizeof(float));
     #else
+    xcorrLen = 2*blocksize-1;
     IppStatus stat;
     IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
     stat = ippsCrossCorrNormGetBufferSize(blocksize, blocksize, xcorrLen, -(blocksize-1), ipp32f, funCfgNormNo, &tmpXcorrBufferSize);
@@ -274,7 +270,7 @@ int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
     // over sized for shifted samples
     denseBuffer = (float***)calloc3d(2, denseGridSize, blocksize+maxShiftOverall, sizeof(float));
     outputBuffer = (float***)calloc3d(2, denseGridSize, blocksize, sizeof(float));
-    xcorrBuffer = (float**)calloc2d(neighborCombLength, 2*blocksize, sizeof(float));
+    xcorrBuffer = (float**)calloc2d(neighborCombLength, blocksize, sizeof(float));
     // stores samples which are shifted out of the frame
     shiftBuffer = (float**)calloc2d(denseGridSize, maxShiftOverall, sizeof(float));
     outData = (float**)calloc2d(denseGridSize, blocksize, sizeof(float));
@@ -285,7 +281,7 @@ int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
     currentTimeShift = (int*)malloc(idxNeighborsDenseLen * sizeof(int)); // TODO: correct size?
 	#ifdef SAF_USE_APPLE_ACCELERATE
 	currentBlock = (float*)malloc(blocksize * sizeof(float));
-	tmpBuf = (float*)malloc(2*blocksize * sizeof(float));
+	tmpBuf = (float*)malloc(blocksize * sizeof(float));
 	#else
     currentBlock = ippsMalloc_32f(blocksize);
 	#endif
@@ -364,7 +360,7 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
          vDSP_conv(xcorrBufferPadded, 1, sparseBuffer[n2], 1, xcorrBuffer[n], 1, (xcorrLen), (blocksize)); // cpu hog at higher block sizes
          #else
          // vDSP_vclr(xcorrBuffer[n], 1, xcorrLen);
-        fftXcorr(sparseBuffer[n2], sparseBuffer[n1], xcorrBuffer[n], 2*blocksize); // M1: 0.1% vs 0.9% CPU (Debug)
+        fftXcorr(sparseBuffer[n2], sparseBuffer[n1], xcorrBuffer[n], blocksize); // M1: 0.1% vs 0.9% CPU (Debug)
          #endif
         #else
         IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
@@ -383,7 +379,7 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
 //        logger.logMessage("xc-tmp " + String(n-1) + " = [" + str + "];");
         
         String st;
-        for (int i=0; i<2*blocksize; i++) {
+        for (int i=0; i<blocksize; i++) {
             int f = round(xcorrBuffer[n][i]);
             st.append(String(f), 20);
             st.append(", ", 2);
@@ -406,9 +402,9 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
                 cblas_scopy(xcorrLen, xcorrBuffer[x], 1, correlation, 1);
             #else
             // manual fft shift
-            vDSP_vclr(correlation, 1, 2*blocksize);
-            cblas_scopy(blocksize, &xcorrBuffer[x][blocksize], 1, &correlation[0], 1);
-            cblas_scopy(blocksize, &xcorrBuffer[x][0], 1, &correlation[blocksize], 1);
+            vDSP_vclr(correlation, 1, blocksize);
+            cblas_scopy(blocksize/2, &xcorrBuffer[x][blocksize/2], 1, &correlation[0], 1);
+            cblas_scopy(blocksize/2, &xcorrBuffer[x][0], 1, &correlation[blocksize/2], 1);
 //            cblas_scopy(2*blocksize, xcorrBuffer[x], 1, correlation, 1);
             #endif
 
@@ -422,7 +418,7 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
                 #ifdef VDSP_CONV
                 vDSP_vrvrs(correlation, 1, xcorrLen); // reverse vector
                 #else
-                vDSP_vrvrs(correlation, 1, 2*blocksize); // reverse vector
+                vDSP_vrvrs(correlation, 1, blocksize); // reverse vector
                 reverse = 1;
                 #endif
                 #else
@@ -431,13 +427,13 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
             }
             neighborsIndexCounter++;
             
-//            String st;
-//            for (int i=0; i<blocksize; i++) {
-//                int f = round(correlation[i]);
-//                st.append(String(f), 5);
-//                st.append(", ", 2);
-//            }
-//            logger.logMessage("dir " + String(dirIdx) + " Node " + String(nodeIndex) + " xc" + String(x) + " = [" + st + "];");
+            String st;
+            for (int i=0; i<blocksize; i++) {
+                int f = round(correlation[i]);
+                st.append(String(f), 5);
+                st.append(", ", 2);
+            }
+            logger.logMessage("dir " + String(dirIdx) + " Node " + String(nodeIndex) + " xc" + String(x) + " = [" + st + "];");
 
             // look for maximal value in the crosscorrelated IRs only in the relevant area
             // correlation = correlation(frame_length-maxShift(nodeIndex-1):frame_length+maxShift(nodeIndex-1));
@@ -453,12 +449,11 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
             maxPos = (int) pos;
             currentTimeShift[nodeIndex] = (1 + maxPos - (shiftLen + 1) / 2); // conv
             #else
-//            vDSP_maxvi(correlation, 1, &maxVal, &pos, 2*blocksize);
+            lowestLagIdx = blocksize/2-maxShift-1;
+//            vDSP_maxvi(correlation, 1, &maxVal, &pos, blocksize);
             vDSP_maxvi(&correlation[lowestLagIdx], 1, &maxVal, &pos, shiftLen);
-
-            // pos = find_peak(&correlation[lowestLagIdx], shiftLen, &maxVal);
             maxPos = (int) pos;
-//            currentTimeShift[nodeIndex] = ((int)(maxPos - blocksize)); // fft
+//            currentTimeShift[nodeIndex] = ((int)(reverse + maxPos - blocksize/2)); // fft
             currentTimeShift[nodeIndex] = (int)(reverse + maxPos - (shiftLen + 1) / 2); // fft
             #endif
             #else
@@ -535,20 +530,5 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
         ippsCopy_32f(&denseBuffer[bufferNum][dirIdx][blocksize], shiftBuffer[dirIdx], maxShiftOverall);
 		#endif
     }
-}
-
-//naive peak finder
-//vDSP_maxvi(&correlation[lowestLagIdx], 1, &maxVal, &pos, shiftLen);
-int Sarita::find_peak(float *coeffs, int coeffsize, float *maxVal) {
-    //vDSP_maxmgvi(coeffs, 1, maxVal, &index, coeffSize);     //does not work because it uses abs values...
-    *maxVal = FLT_MIN;
-    int index = -1;
-    for (int counter = 0; counter < coeffsize; ++counter) {
-        if (coeffs[counter] > *maxVal) {
-            *maxVal = coeffs[counter];
-            index = counter;
-        }
-    }
-    return index;
 }
 
