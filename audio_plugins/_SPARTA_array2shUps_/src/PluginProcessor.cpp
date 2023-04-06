@@ -349,7 +349,12 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
                     // copy to array2Sh processing buffer
                     sarita.output->pop(sarita.outData[ch], ch, frameSize);
                     // normalize sh transform input
+                    #ifdef SAF_USE_APPLE_ACCELERATE
+                    float value = 1.f/sarita.denseGridSize;
+                    vDSP_vsmul(sarita.outData[ch], 1, &value, sarita.outData[ch], 1, frameSize);
+                    #else
                     ippsMulC_32f_I(1.f/sarita.denseGridSize, sarita.outData[ch], frameSize); // FIXME: find correct value
+                    #endif
                 }
                 
                 // gather channel pointers to output buffer

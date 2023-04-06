@@ -36,7 +36,7 @@
     Describe your class and how it works here!
                                                                     //[/Comments]
 */
-class anaview  : public Component
+class anaview  : public juce::Component
 {
 public:
     //==============================================================================

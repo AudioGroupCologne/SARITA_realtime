@@ -78,6 +78,8 @@
  This file should be included into a JUCE project as it has JUCE dependencies.
  */
 
+//#include "JuceHeader.h"
+
 class ConfigurationHelper
 {
 public:

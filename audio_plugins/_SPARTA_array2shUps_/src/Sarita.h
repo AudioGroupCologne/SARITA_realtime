@@ -31,12 +31,20 @@
 #ifndef sarita_h
 #define sarita_h
 
-#include <JuceHeader.h>
-#include "ipp.h"
+#ifdef SAF_USE_APPLE_ACCELERATE
+	#include <Accelerate/Accelerate.h>
+	#define FLOATTYPE float
+	#define BYTETYPE uint8_t
+#else
+	#include "ipp.h"
+	#define FLOATTYPE Ipp32f
+	#define BYTETYPE Ipp8u
+#endif
+//
 #include "saf.h"           /* Main include header for SAF */
 #include "array2sh.h"
 #include "../src/array2sh/array2sh_internal.h"
-
+#include <JuceHeader.h>
 #define TEST_AUDIO_OUTPUT
 
 static std::unique_ptr<juce::FileLogger> flogger;
@@ -170,12 +178,17 @@ class Sarita
 {
     
 public:
+    Sarita();
     void processFrame (int blocksize, int numInputChannels);
     void deallocBuffers();
     void setOverlap(float newOverlap);
     void updateOverlap(int blocksize);
     int setupSarita(const char* path, int blocksize, int numInputCount);
     void hannWindow(int len, int overlap);
+    #ifdef SAF_USE_APPLE_ACCELERATE
+    void setupFFT(int blocksize);
+    void fftXcorr(float* buf1, float* buf2, float* xcorr, int blocksize);
+    #endif
     int readConfigFile(const char* path);
     
     // copy config data to array2sh structs
@@ -219,19 +232,34 @@ public:
     bool wantsConfigUpdate = false;
     int bufferNum = 0; // double buffer 0/1
 
+    float** testBuffer = NULL;
+    float* xcorrBufferPadded = NULL;
+    
+    File logFile;
+    juce::FileLogger logger;
+    
 private:
     
-    // cross correlation buffers
+    // cross correlation buffersxc
+    #ifdef SAF_USE_APPLE_ACCELERATE
+    FFTSetup fftSetup = NULL;
+    vDSP_Length log2n;
+    DSPSplitComplex inputBuffer1;
+    DSPSplitComplex inputBuffer2;
+    DSPSplitComplex outputBuffer3;
+    #endif
+    
     int xcorrLen;
     int tmpXcorrBufferSize;
-    Ipp8u* tmpXcorrBuffer = NULL;
-    Ipp32f* correlation;
+	BYTETYPE* tmpXcorrBuffer = NULL;
+	FLOATTYPE* correlation;
     float** xcorrBuffer;
 
-    Ipp32f *hannWin = NULL;
+	FLOATTYPE* hannWin = NULL;
     float** shiftBuffer;
     int* currentTimeShift;
-    Ipp32f* currentBlock;
+	FLOATTYPE* currentBlock;
+	FLOATTYPE* tmpBuf;
 
     /*
     * binary file read helpers

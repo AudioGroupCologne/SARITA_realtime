@@ -38,7 +38,7 @@
     Describe your class and how it works here!
                                                                     //[/Comments]
 */
-class eqview_window  : public Component
+class eqview_window  : public juce::Component
 {
 public:
     //==============================================================================
