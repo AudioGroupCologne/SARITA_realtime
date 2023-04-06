@@ -31,7 +31,7 @@
 #ifndef sarita_h
 #define sarita_h
 
-#ifdef SAF_USE_APPLE_ACCELERATE
+#ifdef SAF_USE_APPLE_ACCELERATE  // defined in projucer file
 	#include <Accelerate/Accelerate.h>
 	#define FLOATTYPE float
 	#define BYTETYPE uint8_t
@@ -45,7 +45,9 @@
 #include "array2sh.h"
 #include "../src/array2sh/array2sh_internal.h"
 #include <JuceHeader.h>
-#define TEST_AUDIO_OUTPUT
+
+#define TEST_AUDIO_OUTPUT // Don't calc spherical harmonics, write SARITA-upsampled channels to output buffers
+//#define VDSP_CONV     // prefer vDSP_conv() over fft-based correlation when SAF_USE_ACCELERATE is defined
 
 static std::unique_ptr<juce::FileLogger> flogger;
 
@@ -232,11 +234,10 @@ public:
     bool wantsConfigUpdate = false;
     int bufferNum = 0; // double buffer 0/1
 
-    float** testBuffer = NULL;
     float* xcorrBufferPadded = NULL;
     
-    File logFile;
-    juce::FileLogger logger;
+//    File logFile;
+//    juce::FileLogger logger;
     
 private:
     
