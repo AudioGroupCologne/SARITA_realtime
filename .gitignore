@@ -1,6 +1,7 @@
 make/
 obj/
 build/
+Builds/
 JuceLibraryCode/
 SDKs/JUCE/
 SDKs/VST3_SDK

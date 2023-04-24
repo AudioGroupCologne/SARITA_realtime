@@ -47,7 +47,7 @@ public:
 
     //==============================================================================
     //[UserMethods]     -- You can add your own custom methods in this section.
-    Rectangle<int> localBounds;
+    juce::Rectangle<int> localBounds;
 
     void setSolidCurves_Handle(float* _freqVector, float* _solidCurves, int _numFreqPoints, int _numCurves)
     {

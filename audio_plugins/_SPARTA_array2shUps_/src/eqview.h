@@ -45,7 +45,7 @@ public:
 
     //==============================================================================
     //[UserMethods]     -- You can add your own custom methods in this section.
-    Rectangle<int> localBounds;
+    juce::Rectangle<int> localBounds;
     std::unique_ptr<eqview_window> eqview_windowIncluded;
 
     void setSolidCurves_Handle(float* _freqVector, float** _solidCurves, int _numFreqPoints, int _numCurves){
