@@ -49,7 +49,7 @@ int Sarita::readConfigFile(const char* path)
     result = fread(&combinationsPtrLen, sizeof(int), 1, configFile);
     
     // poor man's plausibility check
-    if (denseGridSize > ARRAY2SH_MAX_NUM_SENSORS)
+    if (denseGridSize > ARRAY2SH_MAX_NUM_SENSORS || denseGridSize == 0)
         return -1;
     
     /* read config file data */
@@ -173,14 +173,14 @@ void Sarita::deallocBuffers()
     if (sparseBuffer != NULL) {
         free(sparseBuffer);
         sparseBuffer = nullptr;
-        #ifdef SAF_USE_APPLE_ACCELERATE
+#ifdef SAF_USE_APPLE_ACCELERATE
         free(tmpBuf);
         free(correlation);
-        #else
+#else
         ippsFree(tmpXcorrBuffer);
         ippsFree(correlation);
         ippsFree(currentBlock);
-        #endif
+#endif
         free(currentTimeShift);
         free(denseBuffer);
         free(outputBuffer);
@@ -190,7 +190,7 @@ void Sarita::deallocBuffers()
         delete(input);
         delete(output);
     }
-    
+
     if (numNeighborsDense != NULL)
     {
         free(numNeighborsDense);
@@ -215,6 +215,50 @@ void Sarita::deallocBuffers()
     
 }
 
+
+void Sarita::allocBuffers(int blocksize, int numInputCount)
+{
+    bufferSize = 2 * blocksize; // (2 - SARITA_OVERLAP)*blockSize;
+    updateOverlap(blocksize);
+
+    // allocate buffers
+    #ifdef SAF_USE_APPLE_ACCELERATE
+    xcorrLen = blocksize;
+    // fft for vDSP XCorr
+    setupFFT(blocksize);
+    correlation = (float*)malloc(xcorrLen * sizeof(float));
+    // padded buffer for vDSP_conv
+    xcorrBufferPadded = (float*)calloc((blocksize - 1 + blocksize + blocksize - 1), sizeof(float));
+    #else
+    xcorrLen = 2 * blocksize-1;
+    IppStatus stat;
+    IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
+    stat = ippsCrossCorrNormGetBufferSize(blocksize, blocksize, xcorrLen, -(blocksize-1), ipp32f, funCfgNormNo, &tmpXcorrBufferSize);
+    tmpXcorrBuffer = ippsMalloc_8u(tmpXcorrBufferSize);
+    correlation = ippsMalloc_32f(blocksize * 2);
+    #endif
+
+    sparseBuffer = (float**)calloc2d(64 /* max input count */, blocksize, sizeof(float));
+    // over sized for shifted samples
+    denseBuffer = (float***)calloc3d(2, denseGridSize, blocksize+maxShiftOverall*2, sizeof(float));
+    outputBuffer = (float***)calloc3d(2, denseGridSize, blocksize, sizeof(float));
+    xcorrBuffer = (float**)calloc2d(neighborCombLength, xcorrLen, sizeof(float));
+    // stores samples which are shifted out of the frame
+    shiftBuffer = (float**)calloc2d(denseGridSize, maxShiftOverall, sizeof(float));
+    outData = (float**)calloc2d(denseGridSize, blocksize, sizeof(float));
+
+    input = new RingBuffer(numInputCount, bufferSize); // FIXME: matching channel num
+    output = new RingBuffer(denseGridSize, bufferSize);
+
+    currentTimeShift = (int*)malloc(idxNeighborsDenseLen * sizeof(int)); // TODO: correct size?
+    #ifdef SAF_USE_APPLE_ACCELERATE
+    currentBlock = (float*)malloc(blocksize * sizeof(float));
+    tmpBuf = (float*)malloc(blocksize * sizeof(float));
+    #else
+    currentBlock = ippsMalloc_32f(blocksize);
+    #endif
+}
+
 void Sarita::setOverlap(float newOverlap)
 {
     overlapPercent = newOverlap;
@@ -237,45 +281,7 @@ int Sarita::setupSarita(const char* path, int blocksize, int numInputCount)
     if(readConfigFile(path) < 0)
         return -1;
     
-    bufferSize = 2*blocksize; // (2 - SARITA_OVERLAP)*blockSize;
-    updateOverlap(blocksize);
-
-    // allocate buffers
-    #ifdef SAF_USE_APPLE_ACCELERATE
-    xcorrLen = blocksize;
-    // fft for vDSP XCorr
-    setupFFT(blocksize);
-    correlation = (float*)malloc(xcorrLen * sizeof(float));
-    // padded buffer for vDSP_conv
-    xcorrBufferPadded = (float*)calloc((blocksize-1 + blocksize + blocksize-1), sizeof(float));
-    #else
-    xcorrLen = 2*blocksize-1;
-    IppStatus stat;
-    IppEnum funCfgNormNo = (IppEnum)(ippAlgAuto | ippsNormNone);
-    stat = ippsCrossCorrNormGetBufferSize(blocksize, blocksize, xcorrLen, -(blocksize-1), ipp32f, funCfgNormNo, &tmpXcorrBufferSize);
-    tmpXcorrBuffer = ippsMalloc_8u(tmpXcorrBufferSize);
-    correlation = ippsMalloc_32f(blocksize * 2);
-	#endif
-	
-    sparseBuffer = (float**)calloc2d(64 /* max input count */, blocksize, sizeof(float));
-    // over sized for shifted samples
-    denseBuffer = (float***)calloc3d(2, denseGridSize, blocksize+maxShiftOverall, sizeof(float));
-    outputBuffer = (float***)calloc3d(2, denseGridSize, blocksize, sizeof(float));
-    xcorrBuffer = (float**)calloc2d(neighborCombLength, blocksize, sizeof(float));
-    // stores samples which are shifted out of the frame
-    shiftBuffer = (float**)calloc2d(denseGridSize, maxShiftOverall, sizeof(float));
-    outData = (float**)calloc2d(denseGridSize, blocksize, sizeof(float));
-
-    input = new RingBuffer(numInputCount, bufferSize); // FIXME: matching channel num
-    output = new RingBuffer(denseGridSize, bufferSize);
-
-    currentTimeShift = (int*)malloc(idxNeighborsDenseLen * sizeof(int)); // TODO: correct size?
-	#ifdef SAF_USE_APPLE_ACCELERATE
-	currentBlock = (float*)malloc(blocksize * sizeof(float));
-	tmpBuf = (float*)malloc(blocksize * sizeof(float));
-	#else
-    currentBlock = ippsMalloc_32f(blocksize);
-	#endif
+    allocBuffers(blocksize, numInputCount);
 	
     configError = false;
     return 0;
@@ -325,7 +331,7 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
 
     // in each frame the cross-correlation required for the upsampling are determined
     uint8_t n1, n2;
-    int maxSensors = denseGridSize;
+    int maxSensors = numInputChannels; // Sparse grid size not dense Grid Size!
     for (uint32_t n=0; n<neighborCombLength; n++) {
         n1 = neighborCombinations[n][0] - 1;
         n2 = neighborCombinations[n][1] - 1;
@@ -467,6 +473,9 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
             int timeShiftFinal = round(-timeShiftMean + currentTimeShift[nodeIndex] + maxShiftOverall); // As maxShiftOverall is added, timeShiftFinal will always be positive
             timeShiftFinal = (timeShiftFinal < 0) ? 0: timeShiftFinal; // Added 22.12.2021 to assure that timeShiftFinal does not become negative
 
+           /* if (timeShiftFinal > maxShiftOverall) {
+                timeShiftFinal = maxShiftOverall;
+            }*/
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
             if (nodeIndex == 0) {

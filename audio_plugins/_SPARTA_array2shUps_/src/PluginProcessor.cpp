@@ -42,7 +42,7 @@ void PluginProcessor::setParameter (int index, float newValue)
     /* standard parameters */
     if(index < k_NumOfParameters){
         switch (index) {
-            case k_overlap:     sarita.setOverlap(newValue);
+            case k_overlap:     sarita.setOverlap(newValue); break;
             case k_outputOrder:   array2sh_setEncodingOrder(hA2sh, (SH_ORDERS)(int)(newValue*(float)(MAX_SH_ORDER-1) + 1.5f)); break;
             case k_channelOrder:  array2sh_setChOrder(hA2sh, (int)(newValue*(float)(NUM_CH_ORDERINGS-1) + 1.5f)); break;
             case k_normType:      array2sh_setNormType(hA2sh, (int)(newValue*(float)(NUM_NORM_TYPES-1) + 1.5f)); break;
@@ -253,14 +253,21 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     bool blocksizeChanged = nHostBlockSize != samplesPerBlock;
 
     nHostBlockSize = samplesPerBlock;
+    
+    int inputNum = getTotalNumInputChannels();
+    bool inputCountChanged = inputNum != nNumInputs;
+    if (inputCountChanged && !sarita.configError) {
+        sarita.deallocBuffers();
+        sarita.allocBuffers(nHostBlockSize, inputNum);
+    }
     nNumInputs =  getTotalNumInputChannels();
     nNumOutputs =  getTotalNumOutputChannels();
     nSampleRate = (int)(sampleRate + 0.5);
-
+    
     array2sh_init(hA2sh, nSampleRate);
     
     if (sarita.configError == true || sampleRateChanged || blocksizeChanged) {
-        newCfgFile = lastCfgFile;
+      //  newCfgFile = lastCfgFile;
         sarita.wantsConfigUpdate = true;
     }
     
@@ -278,9 +285,8 @@ void PluginProcessor::releaseResources()
 void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*midiMessages*/)
 {
     int nCurrentBlockSize = buffer.getNumSamples();
-    nNumInputs = jmin(getTotalNumInputChannels(), buffer.getNumChannels());
     nNumOutputs = jmin(getTotalNumOutputChannels(), buffer.getNumChannels());
-    
+
     if (sarita.overlapChanged) {
         sarita.updateOverlap(nHostBlockSize);
     }
@@ -289,12 +295,12 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         DBG("load cfg");
         loadConfiguration(newCfgFile);
     }
-    
+
     // if config file read is not successful
-    if (sarita.configError || nCurrentBlockSize < nHostBlockSize)
+    if (sarita.configError || nCurrentBlockSize < nHostBlockSize) {
         buffer.clear();
-    else
-    {
+    }
+    else {
         // fill input ring buffer
         for (int ch = 0; ch < nNumInputs; ch++) {
             auto* channelData = buffer.getReadPointer(ch);
@@ -321,7 +327,7 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
             }
             sarita.bufferNum ^= 1; // swap buffer
         }
-        
+
         // test output
 #ifdef TEST_AUDIO_OUTPUT
         if (sarita.output->bufferedBytes >= nHostBlockSize) {
@@ -422,7 +428,6 @@ void PluginProcessor::getStateInformation (MemoryBlock& destData)
 void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     std::unique_ptr<XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
-    int i;
     
     if (xmlState != nullptr) {
         if (xmlState->hasTagName("ARRAY2SHPLUGINSETTINGS")) {
@@ -467,10 +472,14 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
                 lastDir = xmlState->getStringAttribute("CfgFilePath", "");
             
             if(xmlState->hasAttribute("CfgFileName")) {
-                lastCfgFile = xmlState->getStringAttribute("CfgFileName", "");
-                if(sarita.readConfigFile(lastCfgFile.getFullPathName().getCharPointer()) < 0);
+                File cfgFile = xmlState->getStringAttribute("CfgFileName", "");
+                
+                if (!cfgFile.existsAsFile())
                     return;
-                sarita.updateArrayData(hA2sh);
+
+                newCfgFile = cfgFile;
+                //sarita.updateArrayData(hA2sh);
+                sarita.wantsConfigUpdate = true;
             }
             array2sh_refreshSettings(hA2sh);
         }
@@ -511,11 +520,11 @@ void PluginProcessor::loadConfiguration (const File& configFile)
     if (!configFile.existsAsFile())
         return;
     
-    lastCfgFile = configFile;
     const char *p = configFile.getFullPathName().getCharPointer();
     if(sarita.setupSarita(p, nHostBlockSize, nNumInputs) == -1)
         return; // config error
-    
+
+    lastCfgFile = configFile;
     sarita.updateArrayData(hA2sh);
 }
 

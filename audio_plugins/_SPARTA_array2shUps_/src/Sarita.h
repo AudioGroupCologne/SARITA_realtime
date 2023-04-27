@@ -181,8 +181,10 @@ class Sarita
     
 public:
     Sarita();
+   // Sarita::~Sarita() { deallocBuffers(); }
     void processFrame (int blocksize, int numInputChannels);
     void deallocBuffers();
+    void allocBuffers(int blocksize, int numInputChannels);
     void setOverlap(float newOverlap);
     void updateOverlap(int blocksize);
     int setupSarita(const char* path, int blocksize, int numInputCount);

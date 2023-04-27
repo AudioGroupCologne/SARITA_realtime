@@ -957,113 +957,113 @@ void PluginEditor::buttonClicked (juce::Button* buttonThatWasClicked)
 //[MiscUserCode] You can add your own definitions of your custom methods or any other code here...
 void PluginEditor::timerCallback(int timerID)
 {
-    switch(timerID){
+    switch (timerID) {
         case TIMER_PROCESSING_RELATED:
             /* handled in PluginProcessor */
             break;
 
-        case TIMER_GUI_RELATED:
-//            if (hVst->sarita.wantsConfigUpdate == true) {
-//                while(hVst->sarita.frameDone)
-//                    ;
-//                hVst->loadConfiguration (file);
-//            }
-            
-            /* parameters whos values can change internally should be periodically refreshed */
+        case TIMER_GUI_RELATED: {
+            //            if (hVst->sarita.wantsConfigUpdate == true) {
+            //                while(hVst->sarita.frameDone)
+            //                    ;
+            //                hVst->loadConfiguration (file);
+            //            }
+
+                        /* parameters whos values can change internally should be periodically refreshed */
             int curOrder = CBencodingOrder->getSelectedId();
-                       if(CBencodingOrder->getSelectedId()!=array2sh_getEncodingOrder(hA2sh))
+            if (CBencodingOrder->getSelectedId() != array2sh_getEncodingOrder(hA2sh))
                 CBencodingOrder->setSelectedId(array2sh_getEncodingOrder(hA2sh), dontSendNotification);
 
-//            // hack: force update overlap combo box => why doesn't that get updated automatically?
-//            String ovl = overlapCB->getItemText(overlapCB->getSelectedItemIndex());
-//            String sub = ovl.upToFirstOccurrenceOf(" ", false, true);
-//            float val = sub.getFloatValue();
-//            val = jlimit(0.f, 50.f, val);
-//            if (val != hVst->sarita.overlapPercent) {
-//                int id = 1;
-//                if (val < 25)
-//                    id = 0;
-//                else if (val > 25)
-//                    id = 2;
-//                overlapCB->setSelectedId(id);
-//            }
-            
-            sensorCoordsView_handle->setQ(array2sh_getNumSensors(hA2sh));
-            sensorCoordsView_handle->setUseDegreesInstead(true);
-            if(CHOrderingCB->getSelectedId()!=array2sh_getChOrder(hA2sh))
-                CHOrderingCB->setSelectedId(array2sh_getChOrder(hA2sh), dontSendNotification);
-            if(normalisationCB->getSelectedId()!=array2sh_getNormType(hA2sh))
-                normalisationCB->setSelectedId(array2sh_getNormType(hA2sh), dontSendNotification);
-            CHOrderingCB->setItemEnabled(CH_FUMA, array2sh_getEncodingOrder(hA2sh)==SH_ORDER_FIRST ? true : false);
-            normalisationCB->setItemEnabled(NORM_FUMA, array2sh_getEncodingOrder(hA2sh)==SH_ORDER_FIRST ? true : false);
+            //            // hack: force update overlap combo box => why doesn't that get updated automatically?
+            //            String ovl = overlapCB->getItemText(overlapCB->getSelectedItemIndex());
+            //            String sub = ovl.upToFirstOccurrenceOf(" ", false, true);
+            //            float val = sub.getFloatValue();
+            //            val = jlimit(0.f, 50.f, val);
+            //            if (val != hVst->sarita.overlapPercent) {
+            //                int id = 1;
+            //                if (val < 25)
+            //                    id = 0;
+            //                else if (val > 25)
+            //                    id = 2;
+            //                overlapCB->setSelectedId(id);
+            //            }
+            if (!hVst->sarita.configError) {
+                sensorCoordsView_handle->setQ(array2sh_getNumSensors(hA2sh));
+                if (CHOrderingCB->getSelectedId() != array2sh_getChOrder(hA2sh))
+                    CHOrderingCB->setSelectedId(array2sh_getChOrder(hA2sh), dontSendNotification);
+                if (normalisationCB->getSelectedId() != array2sh_getNormType(hA2sh))
+                    normalisationCB->setSelectedId(array2sh_getNormType(hA2sh), dontSendNotification);
+                CHOrderingCB->setItemEnabled(CH_FUMA, array2sh_getEncodingOrder(hA2sh) == SH_ORDER_FIRST ? true : false);
+                normalisationCB->setItemEnabled(NORM_FUMA, array2sh_getEncodingOrder(hA2sh) == SH_ORDER_FIRST ? true : false);
+            }
 
             /* check if eval curves have recently been computed */
-            if(array2sh_getEvalStatus(hA2sh)==EVAL_STATUS_RECENTLY_EVALUATED){
+            if (array2sh_getEvalStatus(hA2sh) == EVAL_STATUS_RECENTLY_EVALUATED) {
                 needScreenRefreshFLAG = true;
                 array2sh_setEvalStatus(hA2sh, EVAL_STATUS_EVALUATED);
             }
 
             /* disable certain sliders if evaluation is ongoing */
-            if(array2sh_getEvalStatus(hA2sh)==EVAL_STATUS_EVALUATING){
-                if(filterTypeCB->isEnabled())
+            if (array2sh_getEvalStatus(hA2sh) == EVAL_STATUS_EVALUATING) {
+                if (filterTypeCB->isEnabled())
                     filterTypeCB->setEnabled(false);
-                if(regAmountSlider->isEnabled())
+                if (regAmountSlider->isEnabled())
                     regAmountSlider->setEnabled(false);
-                if(CBencodingOrder->isEnabled())
+                if (CBencodingOrder->isEnabled())
                     CBencodingOrder->setEnabled(false);
-                if(sensorCoordsVP->isEnabled())
+                if (sensorCoordsVP->isEnabled())
                     sensorCoordsVP->setEnabled(false);
             }
-            else{
-                if(!filterTypeCB->isEnabled())
+            else {
+                if (!filterTypeCB->isEnabled())
                     filterTypeCB->setEnabled(true);
-                if(!regAmountSlider->isEnabled())
+                if (!regAmountSlider->isEnabled())
                     regAmountSlider->setEnabled(true);
-                if(!CBencodingOrder->isEnabled())
+                if (!CBencodingOrder->isEnabled())
                     CBencodingOrder->setEnabled(true);
-                if(!sensorCoordsVP->isEnabled())
+                if (!sensorCoordsVP->isEnabled())
                     sensorCoordsVP->setEnabled(true);
             }
 
             /* draw magnitude/spatial-correlation/level-difference curves */
-            if (needScreenRefreshFLAG && !array2sh_getReinitSHTmatrixFLAG(hA2sh)){
-                switch(dispID){
-                    default:
-                    case SHOW_EQ:
-                        eqviewIncluded->setNumCurves(array2sh_getEncodingOrder(hA2sh)+1);
-                        eqviewIncluded->setVisible(true);
+            if (needScreenRefreshFLAG && !array2sh_getReinitSHTmatrixFLAG(hA2sh)) {
+                switch (dispID) {
+                default:
+                case SHOW_EQ:
+                    eqviewIncluded->setNumCurves(array2sh_getEncodingOrder(hA2sh) + 1);
+                    eqviewIncluded->setVisible(true);
+                    cohviewIncluded->setVisible(false);
+                    ldiffviewIncluded->setVisible(false);
+                    eqviewIncluded->repaint();
+                    break;
+                case SHOW_SPATIAL_COH:
+                    eqviewIncluded->setVisible(false);
+                    ldiffviewIncluded->setVisible(false);
+                    if ((array2sh_getEvalStatus(hA2sh) == EVAL_STATUS_EVALUATED)) {
+                        cohviewIncluded->setNumCurves(array2sh_getEncodingOrder(hA2sh) + 1);
+                        cohviewIncluded->setVisible(true);
+                        cohviewIncluded->repaint();
+                    }
+                    else
                         cohviewIncluded->setVisible(false);
+                    break;
+                case SHOW_LEVEL_DIFF:
+                    eqviewIncluded->setVisible(false);
+                    cohviewIncluded->setVisible(false);
+                    if ((array2sh_getEvalStatus(hA2sh) == EVAL_STATUS_EVALUATED)) {
+                        ldiffviewIncluded->setNumCurves(array2sh_getEncodingOrder(hA2sh) + 1);
+                        ldiffviewIncluded->setVisible(true);
+                        ldiffviewIncluded->repaint();
+                    }
+                    else
                         ldiffviewIncluded->setVisible(false);
-                        eqviewIncluded->repaint();
-                        break;
-                    case SHOW_SPATIAL_COH:
-                        eqviewIncluded->setVisible(false);
-                        ldiffviewIncluded->setVisible(false);
-                        if((array2sh_getEvalStatus(hA2sh) == EVAL_STATUS_EVALUATED)){
-                            cohviewIncluded->setNumCurves(array2sh_getEncodingOrder(hA2sh)+1);
-                            cohviewIncluded->setVisible(true);
-                            cohviewIncluded->repaint();
-                        }
-                        else
-                            cohviewIncluded->setVisible(false);
-                        break;
-                    case SHOW_LEVEL_DIFF:
-                        eqviewIncluded->setVisible(false);
-                        cohviewIncluded->setVisible(false);
-                        if((array2sh_getEvalStatus(hA2sh) == EVAL_STATUS_EVALUATED)){
-                            ldiffviewIncluded->setNumCurves(array2sh_getEncodingOrder(hA2sh)+1);
-                            ldiffviewIncluded->setVisible(true);
-                            ldiffviewIncluded->repaint();
-                        }
-                        else
-                            ldiffviewIncluded->setVisible(false);
-                        break;
+                    break;
                 }
                 needScreenRefreshFLAG = false;
             }
 
             /* Progress bar */
-            if(array2sh_getEvalStatus(hA2sh)==EVAL_STATUS_EVALUATING){
+            if (array2sh_getEvalStatus(hA2sh) == EVAL_STATUS_EVALUATING) {
                 addAndMakeVisible(progressbar);
                 progress = (double)array2sh_getProgressBar0_1(hA2sh);
                 char text[PROGRESSBARTEXT_CHAR_LENGTH];
@@ -1074,40 +1074,40 @@ void PluginEditor::timerCallback(int timerID)
                 removeChildComponent(&progressbar);
 
             /* Hide decoding orders that are unsuitable for the current number of sensors */
-            for(int i=1; i<=7; i++)
-                CBencodingOrder->setItemEnabled(i, (i+1)*(i+1) <= array2sh_getNumSensors(hA2sh) ? true : false);
+            for (int i = 1; i <= 7; i++)
+                CBencodingOrder->setItemEnabled(i, (i + 1) * (i + 1) <= array2sh_getNumSensors(hA2sh) ? true : false);
 
             /* display warning message, if needed */
-            if ((hVst->getCurrentBlockSize() % array2sh_getFrameSize()) != 0){
+            if ((hVst->getCurrentBlockSize() % array2sh_getFrameSize()) != 0) {
                 currentWarning = k_warning_frameSize;
-                repaint(0,0,getWidth(),32);
+                repaint(0, 0, getWidth(), 32);
             }
-            else if ( !((array2sh_getSamplingRate(hA2sh) == 44.1e3) || (array2sh_getSamplingRate(hA2sh) == 48e3)) ){
+            else if (!((array2sh_getSamplingRate(hA2sh) == 44.1e3) || (array2sh_getSamplingRate(hA2sh) == 48e3))) {
                 currentWarning = k_warning_supported_fs;
-                repaint(0,0,getWidth(),32);
+                repaint(0, 0, getWidth(), 32);
             }
-            else if(hVst->sarita.configError == false){ // needScreenRefreshFLAG &&
+            else if (hVst->sarita.configError == false) { // needScreenRefreshFLAG &&
                 auto txt = "Source Grid Order: " + String(hVst->sarita.N) + "\n";
                 txt.append("Target Grid Order: " + String(hVst->sarita.NUpsampling) + "\n", 64);
                 txt.append("Number of Sensors: " + String(hVst->sarita.denseGridSize) + "\n", 64);
                 txtGrid->setText(txt);
+                sensorCoordsView_handle->setUseDegreesInstead(true); // refreshCoords()
             }
-            else if ((hVst->getCurrentNumInputs() < array2sh_getNumSensors(hA2sh))){
+            else if ((hVst->getCurrentNumInputs() < array2sh_getNumSensors(hA2sh))) {
                 currentWarning = k_warning_NinputCH;
-                repaint(0,0,getWidth(),32);
+                repaint(0, 0, getWidth(), 32);
             }
-            else if ((hVst->getCurrentNumOutputs() < array2sh_getNSHrequired(hA2sh))){
+            else if ((hVst->getCurrentNumOutputs() < array2sh_getNSHrequired(hA2sh))) {
                 currentWarning = k_warning_NoutputCH;
-                repaint(0,0,getWidth(),32);
+                repaint(0, 0, getWidth(), 32);
             }
-            else if(currentWarning){
+            else if (currentWarning) {
                 currentWarning = k_warning_none;
-                repaint(0,0,getWidth(),32);
+                repaint(0, 0, getWidth(), 32);
             }
-
-            break;
-    }
-}
+        } break; // case
+    } // switch
+} 
 
 
 

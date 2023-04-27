@@ -780,7 +780,7 @@ void array2sh_initArray
     }
     
     /* Fill remaining slots with default coords */
-    for(; ch<MAX_NUM_SENSORS_IN_PRESET; ch++){
+    for(; ch<64; ch++){
         for(i=0; i<2; i++){
             pars->sensorCoords_rad[ch][i] = __default_SENSORcoords64_rad[ch][i];
             pars->sensorCoords_deg[ch][i] = pars->sensorCoords_rad[ch][i] * (180.0f/SAF_PI);
