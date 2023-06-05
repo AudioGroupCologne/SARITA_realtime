@@ -42,7 +42,8 @@ void PluginProcessor::setParameter (int index, float newValue)
     /* standard parameters */
     if(index < k_NumOfParameters){
         switch (index) {
-            case k_overlap:     sarita.setOverlap(newValue); break;
+            case k_overlap:       sarita.setOverlap(newValue); break;
+            case k_perform_sht:   _perform_sht = newValue; DBG("change SHT mode"); break;
             case k_outputOrder:   array2sh_setEncodingOrder(hA2sh, (SH_ORDERS)(int)(newValue*(float)(MAX_SH_ORDER-1) + 1.5f)); break;
             case k_channelOrder:  array2sh_setChOrder(hA2sh, (int)(newValue*(float)(NUM_CH_ORDERINGS-1) + 1.5f)); break;
             case k_normType:      array2sh_setNormType(hA2sh, (int)(newValue*(float)(NUM_NORM_TYPES-1) + 1.5f)); break;
@@ -80,11 +81,13 @@ float PluginProcessor::getParameter (int index)
     if(index < k_NumOfParameters){
         switch (index) {
             case k_overlap: return (float) sarita.overlapPercent;
+            case k_perform_sht:   return _perform_sht;
             case k_outputOrder:   return (float)(array2sh_getEncodingOrder(hA2sh)-1)/(float)(MAX_SH_ORDER-1);
             case k_channelOrder:  return (float)(array2sh_getChOrder(hA2sh)-1)/(float)(NUM_CH_ORDERINGS-1);
             case k_normType:      return (float)(array2sh_getNormType(hA2sh)-1)/(float)(NUM_NORM_TYPES-1);
             case k_filterType:    return (float)(array2sh_getFilterType(hA2sh)-1)/(float)(ARRAY2SH_NUM_FILTER_TYPES-1);
-            case k_maxGain:       return (array2sh_getRegPar(hA2sh)-ARRAY2SH_MAX_GAIN_MIN_VALUE)/(ARRAY2SH_MAX_GAIN_MAX_VALUE-ARRAY2SH_MAX_GAIN_MIN_VALUE);
+            case k_maxGain:       return
+                (array2sh_getRegPar(hA2sh)-ARRAY2SH_MAX_GAIN_MIN_VALUE)/(ARRAY2SH_MAX_GAIN_MAX_VALUE-ARRAY2SH_MAX_GAIN_MIN_VALUE);
             case k_postGain:      return (array2sh_getGain(hA2sh)-ARRAY2SH_POST_GAIN_MIN_VALUE)/(ARRAY2SH_POST_GAIN_MAX_VALUE-ARRAY2SH_POST_GAIN_MIN_VALUE);
             default: return 0.0f;
         }
@@ -121,6 +124,7 @@ const String PluginProcessor::getParameterName (int index)
             case k_filterType:      return "filter_type";
             case k_maxGain:         return "max_gain";
             case k_postGain:        return "post_gain";
+            case k_perform_sht:     return "perform_sht";
             default: return "NULL";
         }
     }
@@ -271,11 +275,14 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         sarita.wantsConfigUpdate = true;
     }
     
+    AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall + array2sh_getProcessingDelay());
+/*
 #ifdef TEST_AUDIO_OUTPUT
     AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall);
 #else
     AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall + array2sh_getProcessingDelay());
 #endif
+ */
 }
 
 void PluginProcessor::releaseResources()
@@ -329,52 +336,54 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
         }
 
         // test output
-#ifdef TEST_AUDIO_OUTPUT
-        if (sarita.output->bufferedBytes >= nHostBlockSize) {
-            uint32_t numCh = juce::jmin((int)buffer.getNumChannels(), (int)sarita.denseGridSize);
-            for (uint32_t ch = 0; ch<numCh; ch++) {
-                float* channelData = buffer.getWritePointer(ch);
-                sarita.output->pop(channelData, ch, nHostBlockSize);
+        if (!_perform_sht) {
+            if (sarita.output->bufferedBytes >= nHostBlockSize) {
+                uint32_t numCh = juce::jmin((int)buffer.getNumChannels(), (int)sarita.denseGridSize);
+                for (uint32_t ch = 0; ch<numCh; ch++) {
+                    float* channelData = buffer.getWritePointer(ch);
+                    sarita.output->pop(channelData, ch, nHostBlockSize);
+                }
+                // increase read index cause not all ring buffer channels are used
+                if ((uint32_t)buffer.getNumChannels() < (uint32_t)sarita.denseGridSize) {
+                    sarita.output->skipPop(nHostBlockSize);
+                }
+            } else {
+                buffer.clear();
             }
-            // increase read index cause not all ring buffer channels are used
-            if ((uint32_t)buffer.getNumChannels() < (uint32_t)sarita.denseGridSize) {
-                sarita.output->skipPop(nHostBlockSize);
-            }
-        }
+        } else {
+            /*
+             * process array2sh with dense grid
+             */
+            float** bufferData = buffer.getArrayOfWritePointers();
+            float* pFrameData[MAX_NUM_CHANNELS];
+            int frameSize = array2sh_getFrameSize();
+            
+            if ((sarita.output->bufferedBytes >= nHostBlockSize) && (nHostBlockSize % frameSize == 0)) { /* buffer filled and blocksize divisible by frame size */
+                for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
+                    for (int ch = 0; ch < (int)sarita.output->numChannels(); ch++) {
+                        // copy to array2Sh processing buffer
+                        sarita.output->pop(sarita.outData[ch], ch, frameSize);
+                        // normalize sh transform input
+#ifdef SAF_USE_APPLE_ACCELERATE
+                        float value = 1.f/sarita.denseGridSize;
+                        vDSP_vsmul(sarita.outData[ch], 1, &value, sarita.outData[ch], 1, frameSize);
 #else
-        /*
-         * process array2sh with dense grid
-         */
-        float** bufferData = buffer.getArrayOfWritePointers();
-        float* pFrameData[MAX_NUM_CHANNELS];
-        int frameSize = array2sh_getFrameSize();
-        
-        if ((sarita.output->bufferedBytes >= nHostBlockSize) && (nHostBlockSize % frameSize == 0)) { /* buffer filled and blocksize divisible by frame size */
-            for (int frame = 0; frame < nCurrentBlockSize/frameSize; frame++) {
-                for (int ch = 0; ch < (int)sarita.output->numChannels(); ch++) {
-                    // copy to array2Sh processing buffer
-                    sarita.output->pop(sarita.outData[ch], ch, frameSize);
-                    // normalize sh transform input
-                    #ifdef SAF_USE_APPLE_ACCELERATE
-                    float value = 1.f/sarita.denseGridSize;
-                    vDSP_vsmul(sarita.outData[ch], 1, &value, sarita.outData[ch], 1, frameSize);
-                    #else
-                    ippsMulC_32f_I(1.f/sarita.denseGridSize, sarita.outData[ch], frameSize); // FIXME: find correct value
-                    #endif
-                }
-                
-                // gather channel pointers to output buffer
-                for (int ch = 0; ch < nNumOutputs; ch++) {
-                    pFrameData[ch] = &bufferData[ch][frame*frameSize];
-                }
-                
-                /* perform processing and write to AudioSampleBuffer */
-                array2sh_process(hA2sh, sarita.outData, pFrameData, sarita.denseGridSize, nNumOutputs, frameSize);
-            }
-        }
+                        ippsMulC_32f_I(1.f/sarita.denseGridSize, sarita.outData[ch], frameSize); // FIXME: find correct value
 #endif
-        else {
-            buffer.clear();
+                    }
+                    
+                    // gather channel pointers to output buffer
+                    for (int ch = 0; ch < nNumOutputs; ch++) {
+                        pFrameData[ch] = &bufferData[ch][frame*frameSize];
+                    }
+                    
+                    /* perform processing and write to AudioSampleBuffer */
+                    array2sh_process(hA2sh, sarita.outData, pFrameData, sarita.denseGridSize, nNumOutputs, frameSize);
+                }
+            }
+            else {
+                buffer.clear();
+            }
         }
     }
 }

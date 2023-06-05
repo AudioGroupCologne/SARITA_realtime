@@ -132,6 +132,7 @@ private:
     std::unique_ptr<juce::ComboBox> CBencodingOrder;
     std::unique_ptr<juce::ComboBox> overlapCB;
     std::unique_ptr<juce::TextEditor> txtGrid;
+    std::unique_ptr<juce::ToggleButton> perform_SHT_btn;
 
 
     //==============================================================================

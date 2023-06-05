@@ -156,6 +156,15 @@ PluginEditor::PluginEditor (PluginProcessor* ownerFilter)
 
     txtGrid->setBounds (24, 96, 176, 64);
 
+    perform_SHT_btn.reset (new juce::ToggleButton ("AmbisonicsOutputBtn"));
+    addAndMakeVisible (perform_SHT_btn.get());
+    perform_SHT_btn->setTooltip (TRANS("If disabled, perform upsampling only, if enabled, the output are SH signlas."));
+    perform_SHT_btn->setButtonText (TRANS("Ambisonics Output"));
+    perform_SHT_btn->addListener (this);
+    perform_SHT_btn->setToggleState (true, juce::dontSendNotification);
+    perform_SHT_btn->addListener(this);
+    perform_SHT_btn->setBounds (240, 400, 150, 24);
+
 
     //[UserPreSize]
     //[/UserPreSize]
@@ -257,14 +266,14 @@ PluginEditor::PluginEditor (PluginProcessor* ownerFilter)
 
     /* grab current parameter settings */
     CBencodingOrder->setSelectedId(array2sh_getEncodingOrder(hA2sh), dontSendNotification);
-    
+
     switch (int(hVst->sarita.overlapPercent * 10.f)) {
         case 125: overlapCB->setSelectedId(1); break; // 12.5 %
         default:
         case 250: overlapCB->setSelectedId(2); break; // 25 %
         case 500: overlapCB->setSelectedId(3); break; // 50 %
     }
-    
+
     regAmountSlider->setRange(ARRAY2SH_MAX_GAIN_MIN_VALUE, ARRAY2SH_MAX_GAIN_MAX_VALUE, 0.01f);
     regAmountSlider->setValue(array2sh_getRegPar(hA2sh), dontSendNotification);
     CHOrderingCB->setSelectedId(array2sh_getChOrder(hA2sh), dontSendNotification);
@@ -325,6 +334,7 @@ PluginEditor::~PluginEditor()
     CBencodingOrder = nullptr;
     overlapCB = nullptr;
     txtGrid = nullptr;
+    perform_SHT_btn = nullptr;
 
 
     //[Destructor]. You can add your own custom destruction code here..
@@ -947,6 +957,12 @@ void PluginEditor::buttonClicked (juce::Button* buttonThatWasClicked)
         });
         //[/UserButtonCode_tb_loadCfg]
     }
+    else if (buttonThatWasClicked == perform_SHT_btn.get())
+    {
+        //[UserButtonCode_perform_SHT_btn] -- add your button handler code here..
+        hVst->setParameter(k_perform_sht, perform_SHT_btn.get()->getToggleState());
+        //[/UserButtonCode_perform_SHT_btn]
+    }
 
     //[UserbuttonClicked_Post]
     //[/UserbuttonClicked_Post]
@@ -1107,7 +1123,7 @@ void PluginEditor::timerCallback(int timerID)
             }
         } break; // case
     } // switch
-} 
+}
 
 
 
@@ -1263,6 +1279,10 @@ BEGIN_JUCER_METADATA
               virtualName="" explicitFocusOrder="0" pos="24 96 176 64" bkgcol="4d2c3c6a"
               initialText="Import a config file first" multiline="1" retKeyStartsLine="0"
               readonly="1" scrollbars="0" caret="0" popupmenu="0"/>
+  <TOGGLEBUTTON name="AmbisonicsOutputBtn" id="ec36141ba8533172" memberName="perform_SHT_btn"
+                virtualName="" explicitFocusOrder="0" pos="240 400 150 24" tooltip="If disabled, perform upsampling only, if enabled, the output are SH signlas."
+                buttonText="Ambisonics Output" connectedEdges="0" needsCallback="1"
+                radioGroupId="0" state="1"/>
 </JUCER_COMPONENT>
 
 END_JUCER_METADATA

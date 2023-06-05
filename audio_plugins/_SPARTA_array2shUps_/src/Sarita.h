@@ -46,7 +46,7 @@
 #include "../src/array2sh/array2sh_internal.h"
 #include <JuceHeader.h>
 
-#define TEST_AUDIO_OUTPUT // Don't calc spherical harmonics, write SARITA-upsampled channels to output buffers
+//#define TEST_AUDIO_OUTPUT // Don't calc spherical harmonics, write SARITA-upsampled channels to output buffers
 //#define VDSP_CONV     // prefer vDSP_conv() over fft-based correlation when SAF_USE_ACCELERATE is defined
 
 static std::unique_ptr<juce::FileLogger> flogger;
