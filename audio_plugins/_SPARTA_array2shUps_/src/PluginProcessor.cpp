@@ -192,6 +192,13 @@ const String PluginProcessor::getOutputChannelName (int channelIndex) const
     return String (channelIndex + 1);
 }
 
+void PluginProcessor::numChannelsChanged()
+{
+	sarita.configError = true;
+	prepareToPlay(getSampleRate(), getBlockSize());
+	
+}
+
 double PluginProcessor::getTailLengthSeconds() const
 {
     return 0.0;
@@ -270,7 +277,7 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     
     array2sh_init(hA2sh, nSampleRate);
     
-    if (sarita.configError == true || sampleRateChanged || blocksizeChanged) {
+    if (sarita.configError == true || sampleRateChanged || blocksizeChanged || inputCountChanged) {
       //  newCfgFile = lastCfgFile;
         sarita.wantsConfigUpdate = true;
     }

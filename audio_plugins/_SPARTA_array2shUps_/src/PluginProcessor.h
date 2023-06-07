@@ -63,6 +63,8 @@ public:
     int getCurrentBlockSize(){ return nHostBlockSize; }
     int getCurrentNumInputs(){ return nNumInputs; }
     int getCurrentNumOutputs(){ return nNumOutputs; }
+	
+	void numChannelsChanged() override;
     
     /* JSON */
     void saveConfigurationToFile (File destination);
