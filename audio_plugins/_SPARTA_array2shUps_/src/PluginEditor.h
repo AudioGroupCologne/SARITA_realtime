@@ -116,7 +116,7 @@ private:
     /* tooltips */
     SharedResourcePointer<TooltipWindow> tipWindow;
     std::unique_ptr<juce::ComboBox> pluginDescription; /* Dummy combo box to provide plugin description tooltip */
-    HyperlinkButton publicationLink { "(Related Publication)", { "https://leomccormack.github.io/sparta-site/docs/help/related-publications/mccormack2018real.pdf" } };
+    HyperlinkButton publicationLink { "(Related Publication)", {"https://ieeexplore.ieee.org/document/10057092" } };
 
     //[/UserVariables]
 
