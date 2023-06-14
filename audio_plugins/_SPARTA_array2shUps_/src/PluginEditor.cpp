@@ -162,7 +162,7 @@ PluginEditor::PluginEditor (PluginProcessor* ownerFilter)
     perform_SHT_btn->setButtonText (TRANS("Ambisonics Output"));
     perform_SHT_btn->addListener (this);
     perform_SHT_btn->setToggleState (true, juce::dontSendNotification);
-    perform_SHT_btn->addListener(this);
+
     perform_SHT_btn->setBounds (240, 400, 150, 24);
 
 
