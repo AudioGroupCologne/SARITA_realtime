@@ -375,7 +375,8 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
                         float value = 1.f/sarita.denseGridSize;
                         vDSP_vsmul(sarita.outData[ch], 1, &value, sarita.outData[ch], 1, frameSize);
 #else
-                        ippsMulC_32f_I(1.f/sarita.denseGridSize, sarita.outData[ch], frameSize); // FIXME: find correct value
+                        ippsMulC_32f_I(sarita.normFactor, sarita.outData[ch], frameSize); // FIXME: find correct value
+                        //ippsMulC_32f_I(1/sarita.denseGridSize, sarita.outData[ch], frameSize); // FIXME: find correct value
 #endif
                     }
                     

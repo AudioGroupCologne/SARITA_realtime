@@ -238,6 +238,8 @@ public:
 
     float* xcorrBufferPadded = NULL;
     
+    float normFactor;
+    
 //    File logFile;
 //    juce::FileLogger logger;
     

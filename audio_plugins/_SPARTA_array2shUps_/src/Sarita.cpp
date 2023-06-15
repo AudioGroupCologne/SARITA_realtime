@@ -90,6 +90,9 @@ int Sarita::readConfigFile(const char* path)
 //    logger.writeToLog("Config\n");
 //    logger.writeToLog("Grid: " + String(denseGridSize));
     
+    // calculate normalization factor
+    normFactor = N/NUpsampling;
+    
     return result;
 }
 
