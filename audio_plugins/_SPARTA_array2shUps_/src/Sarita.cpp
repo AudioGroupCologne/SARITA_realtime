@@ -244,10 +244,10 @@ void Sarita::allocBuffers(int blocksize, int numInputCount)
     sparseBuffer = (float**)calloc2d(64 /* max input count */, blocksize, sizeof(float));
     // over sized for shifted samples
     denseBuffer = (float***)calloc3d(2, denseGridSize, blocksize+maxShiftOverall*2, sizeof(float));
-    outputBuffer = (float***)calloc3d(2, denseGridSize, blocksize, sizeof(float));
+    outputBuffer = (float**)calloc2d(denseGridSize, blocksize, sizeof(float));
     xcorrBuffer = (float**)calloc2d(neighborCombLength, xcorrLen, sizeof(float));
     // stores samples which are shifted out of the frame
-    shiftBuffer = (float**)calloc2d(denseGridSize, maxShiftOverall, sizeof(float));
+    shiftBuffer = (float**)calloc2d(denseGridSize, maxShiftOverall*2, sizeof(float));
     outData = (float**)calloc2d(denseGridSize, blocksize, sizeof(float));
 
     input = new RingBuffer(numInputCount, bufferSize); // FIXME: matching channel num
@@ -428,12 +428,12 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
         memset(denseBuffer[bufferNum][dirIdx], 0, overlapSize);
         
         #ifdef SAF_USE_APPLE_ACCELERATE
-        // zero dense buffer at the end
-        vDSP_vclr(&denseBuffer[bufferNum][dirIdx][blocksize-maxShiftOverall], 1, maxShiftOverall);
-        // copy last out-of-frame samples to denseBuffer
-        cblas_scopy(maxShiftOverall, shiftBuffer[dirIdx], 1, denseBuffer[bufferNum][dirIdx], 1);
+        // zero denseBuffer at beginning and end
+        vDSP_vclr(&denseBuffer[bufferNum][dirIdx][0], 1, blocksize+maxShiftOverall*2);
+//        // copy last out-of-frame samples to denseBuffer
+//        cblas_scopy(2*maxShiftOverall, shiftBuffer[dirIdx], 1, denseBuffer[bufferNum][dirIdx], 1);
         // zero shift buffer
-        vDSP_vclr(shiftBuffer[dirIdx], 1, maxShiftOverall);
+        vDSP_vclr(shiftBuffer[dirIdx], 1, 2*maxShiftOverall);
         // align every block according to the calculated time shift, weight and sum up
         for (int nodeIndex=0; nodeIndex<numNeighbors; nodeIndex++) {
             // currentBlock = neighborsIRs(nodeIndex, :) * weights(nodeIndex);
@@ -446,23 +446,21 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
 
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
-            if (nodeIndex == 0) {
-                cblas_scopy(blocksize, currentBlock, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], 1);
-            }
-            else {
-                // vDSP_vadd(currentBlock, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal] , 1, tmpBuf , 1, blocksize);
-                // cblas_scopy(blocksize, tmpBuf, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], 1);
+//            if (nodeIndex == 0) {
+//                cblas_scopy(blocksize, currentBlock, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], 1);
+//            }
+//            else {
                 cblas_saxpy(blocksize, 1.f, currentBlock, 1, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], 1);
-            }
+//            }
         }
 
         // save out-of-frame samples to shift buffer
-        cblas_scopy(maxShiftOverall, &denseBuffer[bufferNum][dirIdx][blocksize], 1, shiftBuffer[dirIdx], 1);
+        cblas_scopy(2*maxShiftOverall, &denseBuffer[bufferNum][dirIdx][blocksize], 1, shiftBuffer[dirIdx], 1);
         #else
         // zero dense buffer at the end
         ippsZero_32f(&denseBuffer[bufferNum][dirIdx][blocksize-maxShiftOverall], maxShiftOverall);
         // copy last out-of-frame samples to denseBuffer
-        ippsCopy_32f(shiftBuffer[dirIdx], denseBuffer[bufferNum][dirIdx], maxShiftOverall);
+        // ippsCopy_32f(shiftBuffer[dirIdx], denseBuffer[bufferNum][dirIdx], maxShiftOverall);
         // zero shift buffer
         ippsZero_32f(shiftBuffer[dirIdx], maxShiftOverall);
 

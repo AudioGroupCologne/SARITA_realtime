@@ -282,14 +282,11 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         sarita.wantsConfigUpdate = true;
     }
     
-    AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall + array2sh_getProcessingDelay());
-/*
-#ifdef TEST_AUDIO_OUTPUT
-    AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall);
-#else
-    AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall + array2sh_getProcessingDelay());
-#endif
- */
+	if (_perform_sht)
+		AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall + array2sh_getProcessingDelay());
+	else
+		AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall);
+
 }
 
 void PluginProcessor::releaseResources()
@@ -326,14 +323,17 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
             // process frame for all channels
             sarita.processFrame(nCurrentBlockSize, nNumInputs);
 
-            // add overlapping part of current frame to last frame end
             int overlapIdx = juce::jmax(nCurrentBlockSize-sarita.overlapSize, 0);
             for (uint32_t ch=0; ch<sarita.denseGridSize; ch++) {
-                utility_svvadd(&sarita.denseBuffer[sarita.bufferNum][ch][0], &sarita.denseBuffer[!sarita.bufferNum][ch][overlapIdx], sarita.overlapSize, sarita.outputBuffer[sarita.bufferNum][ch]);
+				// add overlapping part of current frame to last frame end
+                utility_svvadd(&sarita.denseBuffer[sarita.bufferNum][ch][0], &sarita.denseBuffer[!sarita.bufferNum][ch][overlapIdx], sarita.overlapSize, sarita.outputBuffer[ch]);
+				
+				// add out-of-frame-shifted samples to densebuffer
+				cblas_saxpy(sarita.maxShiftOverall*2, 1.f, &sarita.shiftBuffer[ch][0], 1, &sarita.denseBuffer[sarita.bufferNum][ch][sarita.overlapSize], 1);
             }
             // copy last overlap to output ring buffer
             for (uint32_t ch=0; ch<sarita.denseGridSize ; ch++) {
-                sarita.output->push(sarita.outputBuffer[sarita.bufferNum][ch], sarita.overlapSize, ch);
+                sarita.output->push(sarita.outputBuffer[ch], sarita.overlapSize, ch);
             }
             // copy non overlapping part to output ring buffer
             for (uint32_t ch=0; ch<sarita.denseGridSize; ch++) {

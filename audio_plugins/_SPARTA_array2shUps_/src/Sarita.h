@@ -208,7 +208,7 @@ public:
     uint32_t fs;
     uint32_t N;                 // order of source grid
     uint32_t NUpsampling;       // order of target grid
-    uint32_t NRendering;        // rendering order
+    uint32_t NRendering;        // rendering order, currently unused
     float radius;               // radius of array
     uint32_t denseGridSize;
     uint32_t maxShiftOverall;
@@ -228,9 +228,11 @@ public:
 
     RingBuffer *input;
     RingBuffer *output;
+	float** shiftBuffer;
+
     float** sparseBuffer = NULL; // audio of source grid
     float*** denseBuffer = NULL; // audio of upsampled target grid
-    float*** outputBuffer = NULL;
+    float** outputBuffer = NULL;
     float** outData = NULL;
     bool configError = true;
     bool wantsConfigUpdate = false;
@@ -261,7 +263,6 @@ private:
     float** xcorrBuffer;
 
 	FLOATTYPE* hannWin = NULL;
-    float** shiftBuffer;
     int* currentTimeShift;
 	FLOATTYPE* currentBlock;
 	FLOATTYPE* tmpBuf;
