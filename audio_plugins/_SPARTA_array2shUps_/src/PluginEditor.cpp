@@ -161,7 +161,6 @@ PluginEditor::PluginEditor (PluginProcessor* ownerFilter)
     perform_SHT_btn->setTooltip (TRANS("If disabled, perform upsampling only, if enabled, the output are SH signlas."));
     perform_SHT_btn->setButtonText (TRANS("Ambisonics Output"));
     perform_SHT_btn->addListener (this);
-    perform_SHT_btn->setToggleState (true, juce::dontSendNotification);
 
     perform_SHT_btn->setBounds (240, 400, 150, 24);
 
@@ -273,6 +272,8 @@ PluginEditor::PluginEditor (PluginProcessor* ownerFilter)
         case 250: overlapCB->setSelectedId(2); break; // 25 %
         case 500: overlapCB->setSelectedId(3); break; // 50 %
     }
+
+	perform_SHT_btn->setToggleState (hVst->_perform_sht, juce::dontSendNotification);
 
     regAmountSlider->setRange(ARRAY2SH_MAX_GAIN_MIN_VALUE, ARRAY2SH_MAX_GAIN_MAX_VALUE, 0.01f);
     regAmountSlider->setValue(array2sh_getRegPar(hA2sh), dontSendNotification);
@@ -1282,7 +1283,7 @@ BEGIN_JUCER_METADATA
   <TOGGLEBUTTON name="AmbisonicsOutputBtn" id="ec36141ba8533172" memberName="perform_SHT_btn"
                 virtualName="" explicitFocusOrder="0" pos="240 400 150 24" tooltip="If disabled, perform upsampling only, if enabled, the output are SH signlas."
                 buttonText="Ambisonics Output" connectedEdges="0" needsCallback="1"
-                radioGroupId="0" state="1"/>
+                radioGroupId="0" state="0"/>
 </JUCER_COMPONENT>
 
 END_JUCER_METADATA

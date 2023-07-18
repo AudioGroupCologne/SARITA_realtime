@@ -84,6 +84,7 @@ public:
     
     Sarita sarita; // FIXME: make private?
     File newCfgFile;
+	bool _perform_sht;
 
 private:
     void* hA2sh;           /* array2sh handle */
@@ -91,7 +92,6 @@ private:
     int nNumOutputs;       /* current number of output channels */
     int nSampleRate;       /* current host sample rate */
     int nHostBlockSize;    /* typical host block size to expect, in samples */
-    bool _perform_sht = false;
     File lastDir;
     File lastCfgFile;
     ValueTree sensors {"Sensors"};

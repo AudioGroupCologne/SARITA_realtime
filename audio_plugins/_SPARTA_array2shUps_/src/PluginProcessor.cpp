@@ -43,7 +43,14 @@ void PluginProcessor::setParameter (int index, float newValue)
     if(index < k_NumOfParameters){
         switch (index) {
             case k_overlap:       sarita.setOverlap(newValue); break;
-            case k_perform_sht:   _perform_sht = newValue; DBG("change SHT mode"); break;
+            case k_perform_sht: {
+				_perform_sht = (newValue > 0.5f? true: false); 
+				DBG("change SHT mode: " + String(newValue));
+				if (_perform_sht)
+					AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall + array2sh_getProcessingDelay());
+				else
+					AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall);
+			} break;
             case k_outputOrder:   array2sh_setEncodingOrder(hA2sh, (SH_ORDERS)(int)(newValue*(float)(MAX_SH_ORDER-1) + 1.5f)); break;
             case k_channelOrder:  array2sh_setChOrder(hA2sh, (int)(newValue*(float)(NUM_CH_ORDERINGS-1) + 1.5f)); break;
             case k_normType:      array2sh_setNormType(hA2sh, (int)(newValue*(float)(NUM_NORM_TYPES-1) + 1.5f)); break;
@@ -281,12 +288,19 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
       //  newCfgFile = lastCfgFile;
         sarita.wantsConfigUpdate = true;
     }
+	
+	if(sarita.wantsConfigUpdate) {
+		loadConfiguration(newCfgFile);
+		sarita.wantsConfigUpdate = false;
+	}
     
-	if (_perform_sht)
-		AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall + array2sh_getProcessingDelay());
-	else
-		AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall);
-
+	if (sarita.configError == false) {
+		DBG("SHT mode: " + String((int)_perform_sht));
+		if (_perform_sht)
+			AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall + array2sh_getProcessingDelay());
+		else
+			AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall);
+	}
 }
 
 void PluginProcessor::releaseResources()
@@ -414,6 +428,7 @@ void PluginProcessor::getStateInformation (MemoryBlock& destData)
     
     xml.setAttribute("order", array2sh_getEncodingOrder(hA2sh));
     xml.setAttribute("overlap", sarita.overlapPercent);
+	xml.setAttribute("performSht", _perform_sht);
 //    xml.setAttribute("Q", array2sh_getNumSensors(hA2sh));
 //    for(int i=0; i<MAX_NUM_CHANNELS; i++){
 //        xml.setAttribute("AziRad" + String(i), array2sh_getSensorAzi_rad(hA2sh,i));
@@ -458,6 +473,8 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
                 array2sh_setEncodingOrder(hA2sh, xmlState->getIntAttribute("order", 1));
             if(xmlState->hasAttribute("overlap"))
                 sarita.setOverlap(xmlState->getDoubleAttribute("overlap", 25.0));
+			if(xmlState->hasAttribute("performSht"))
+				_perform_sht = xmlState->getBoolAttribute("performSht", true);
 //            if(xmlState->hasAttribute("Q"))
 //                array2sh_setNumSensors(hA2sh, xmlState->getIntAttribute("Q", 4));
 //            if(xmlState->hasAttribute("r"))
