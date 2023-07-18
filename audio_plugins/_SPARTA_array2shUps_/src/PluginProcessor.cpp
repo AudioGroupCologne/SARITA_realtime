@@ -285,17 +285,12 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     array2sh_init(hA2sh, nSampleRate);
     
     if (sarita.configError == true || sampleRateChanged || blocksizeChanged || inputCountChanged) {
-      //  newCfgFile = lastCfgFile;
-        sarita.wantsConfigUpdate = true;
-    }
-	
-	if(sarita.wantsConfigUpdate) {
-		loadConfiguration(newCfgFile);
+		loadConfiguration(newCfgFile); // also calls setupSarite()
 		sarita.wantsConfigUpdate = false;
 	}
     
 	if (sarita.configError == false) {
-		DBG("SHT mode: " + String((int)_perform_sht));
+		// DBG("SHT mode: " + String((int)_perform_sht));
 		if (_perform_sht)
 			AudioProcessor::setLatencySamples(nHostBlockSize + sarita.maxShiftOverall + array2sh_getProcessingDelay());
 		else
@@ -311,7 +306,9 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
 {
     int nCurrentBlockSize = buffer.getNumSamples();
     nNumOutputs = jmin(getTotalNumOutputChannels(), buffer.getNumChannels());
-
+	
+	timeStamp = Time::currentTimeMillis(); // detect from editor if we are processing 
+	
     if (sarita.overlapChanged) {
         sarita.updateOverlap(nHostBlockSize);
     }

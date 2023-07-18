@@ -980,13 +980,18 @@ void PluginEditor::timerCallback(int timerID)
             break;
 
         case TIMER_GUI_RELATED: {
-            //            if (hVst->sarita.wantsConfigUpdate == true) {
-            //                while(hVst->sarita.frameDone)
-            //                    ;
-            //                hVst->loadConfiguration (file);
-            //            }
+			int64 pos = hVst->timeStamp;
+			int64 now = Time::currentTimeMillis();
+			// no processing since more than 100ms, safe to load config
+			if (pos < (now - 100)) { 
+//				DBG("not playing: " + String(pos));
+				if (hVst->sarita.wantsConfigUpdate == true) {
+					hVst->loadConfiguration (hVst->newCfgFile);
+					hVst->sarita.wantsConfigUpdate  = false;
+				}
+			}			
 
-                        /* parameters whos values can change internally should be periodically refreshed */
+			/* parameters whos values can change internally should be periodically refreshed */
             int curOrder = CBencodingOrder->getSelectedId();
             if (CBencodingOrder->getSelectedId() != array2sh_getEncodingOrder(hA2sh))
                 CBencodingOrder->setSelectedId(array2sh_getEncodingOrder(hA2sh), dontSendNotification);
