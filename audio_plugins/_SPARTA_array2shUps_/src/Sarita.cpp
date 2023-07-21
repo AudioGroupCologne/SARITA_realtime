@@ -91,7 +91,7 @@ int Sarita::readConfigFile(const char* path)
 //    logger.writeToLog("Grid: " + String(denseGridSize));
     
     // calculate normalization factor
-    normFactor = N/NUpsampling;
+    normFactor = (float)N/(float)NUpsampling;
     
     return result;
 }
@@ -115,12 +115,12 @@ void Sarita::hannWindow(int len, int overlap)
     cblas_scopy(overlap, &tmpWin[overlap+1], 1, &hannWin[len-overlap], 1);
     #else
     // ippsSet_32f & ippsWinHann_32f_I was added to custom saf ipp list!
-    ippsSet_32f(1, tmpWin, overlap*2);
-    ippsWinHann_32f_I(tmpWin, overlap*2);
+    ippsSet_32f(1, tmpWin, overlap*2+1);
+    ippsWinHann_32f_I(tmpWin, overlap*2+1);
 
     ippsSet_32f(1, hannWin, len);
     ippsCopy_32f(tmpWin, hannWin, overlap); // ramp up
-    ippsCopy_32f(&tmpWin[overlap], &hannWin[len-overlap], overlap); // ramp down
+    ippsCopy_32f(&tmpWin[overlap+1], &hannWin[len-overlap], overlap); // ramp down
 	#endif
 	
 	free(tmpWin);
@@ -458,7 +458,7 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
         cblas_scopy(2*maxShiftOverall, &denseBuffer[bufferNum][dirIdx][blocksize], 1, shiftBuffer[dirIdx], 1);
         #else
         // zero dense buffer at the end
-        ippsZero_32f(&denseBuffer[bufferNum][dirIdx][blocksize-maxShiftOverall], maxShiftOverall);
+        ippsZero_32f(&denseBuffer[bufferNum][dirIdx][0], blocksize+maxShiftOverall*2);
         // copy last out-of-frame samples to denseBuffer
         // ippsCopy_32f(shiftBuffer[dirIdx], denseBuffer[bufferNum][dirIdx], maxShiftOverall);
         // zero shift buffer
@@ -479,15 +479,15 @@ void Sarita::processFrame (int blocksize, int numInputChannels)
             }*/
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) = ...
             //drirs_upsampled(dirIndex, startTab + timeShiftFinal:endTab + timeShiftFinal) + currentBlock;
-            if (nodeIndex == 0) {
+            /*if (nodeIndex == 0) {
                 ippsCopy_32f(currentBlock, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], blocksize);
             }
-            else
+            else*/
                 ippsAdd_32f_I(currentBlock, &denseBuffer[bufferNum][dirIdx][timeShiftFinal], blocksize);
         }
 
         // save out-of-frame samples to shift buffer
-        ippsCopy_32f(&denseBuffer[bufferNum][dirIdx][blocksize], shiftBuffer[dirIdx], maxShiftOverall);
+        ippsCopy_32f(&denseBuffer[bufferNum][dirIdx][blocksize], shiftBuffer[dirIdx], 2*maxShiftOverall);
 		#endif
     }
 }
