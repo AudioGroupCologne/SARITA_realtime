@@ -383,7 +383,7 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
                         sarita.output->pop(sarita.outData[ch], ch, frameSize);
                         // normalize sh transform input
 #ifdef SAF_USE_APPLE_ACCELERATE
-                        float value = 1.f/sarita.normFactor;
+                        float value = sarita.normFactor;
                         vDSP_vsmul(sarita.outData[ch], 1, &value, sarita.outData[ch], 1, frameSize);
 #else
                         ippsMulC_32f_I(sarita.normFactor, sarita.outData[ch], frameSize); // FIXME: find correct value
