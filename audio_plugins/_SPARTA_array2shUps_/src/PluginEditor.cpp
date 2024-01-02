@@ -7,7 +7,7 @@
   the "//[xyz]" and "//[/xyz]" sections will be retained when the file is loaded
   and re-saved.
 
-  Created with Projucer version: 6.1.6
+  Created with Projucer version: 7.0.5
 
   ------------------------------------------------------------------------------
 
@@ -983,13 +983,13 @@ void PluginEditor::timerCallback(int timerID)
 			int64 pos = hVst->timeStamp;
 			int64 now = Time::currentTimeMillis();
 			// no processing since more than 100ms, safe to load config
-			if (pos < (now - 100)) { 
+			if (pos < (now - 100)) {
 //				DBG("not playing: " + String(pos));
 				if (hVst->sarita.wantsConfigUpdate == true) {
 					hVst->loadConfiguration (hVst->newCfgFile);
 					hVst->sarita.wantsConfigUpdate  = false;
 				}
-			}			
+			}
 
 			/* parameters whos values can change internally should be periodically refreshed */
             int curOrder = CBencodingOrder->getSelectedId();
@@ -1108,13 +1108,6 @@ void PluginEditor::timerCallback(int timerID)
                 currentWarning = k_warning_supported_fs;
                 repaint(0, 0, getWidth(), 32);
             }
-            else if (hVst->sarita.configError == false) { // needScreenRefreshFLAG &&
-                auto txt = "Source Grid Order: " + String(hVst->sarita.N) + "\n";
-                txt.append("Target Grid Order: " + String(hVst->sarita.NUpsampling) + "\n", 64);
-                txt.append("Number of Sensors: " + String(hVst->sarita.denseGridSize) + "\n", 64);
-                txtGrid->setText(txt);
-                sensorCoordsView_handle->setUseDegreesInstead(true); // refreshCoords()
-            }
             else if ((hVst->getCurrentNumInputs() < array2sh_getNumSensors(hA2sh))) {
                 currentWarning = k_warning_NinputCH;
                 repaint(0, 0, getWidth(), 32);
@@ -1127,6 +1120,14 @@ void PluginEditor::timerCallback(int timerID)
                 currentWarning = k_warning_none;
                 repaint(0, 0, getWidth(), 32);
             }
+			
+			if (hVst->sarita.configError == false) { // needScreenRefreshFLAG &&
+				auto txt = "Source Grid Order: " + String(hVst->sarita.N) + "\n";
+				txt.append("Target Grid Order: " + String(hVst->sarita.NUpsampling) + "\n", 64);
+				txt.append("Number of Sensors: " + String(hVst->sarita.denseGridSize) + "\n", 64);
+				txtGrid->setText(txt);
+				sensorCoordsView_handle->setUseDegreesInstead(true); // refreshCoords()
+			}
         } break; // case
     } // switch
 }
