@@ -5,7 +5,7 @@ VST implementation of SARITA algorithm [1, 2], build upon the [SPARTA](https://g
 * [2] Poerschmann C., Luebeck T. Arend, J.M. [** JAES PAPER**]
 * [3] McCormack, L. and Politis, A. 2019. [**SPARTA & COMPASS: Real-time implementations of linear and parametric spatial audio reproduction and processing methods**](docs/McCormackPolitis2019SpartaCompass.pdf). In Audio Engineering Society Conference: 2019 AES International Conference on Immersive and Interactive Audio.
 
-![](sarita_screenshot.png)
+![](sarita_screenshot.jpg)
 
 ## Description
 XXX
