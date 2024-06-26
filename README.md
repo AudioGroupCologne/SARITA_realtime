@@ -7,7 +7,10 @@ VST implementation of SARITA algorithm [1, 2], build upon the [SPARTA](https://g
 
 ![](sparta_screenshot.png)
 
-
+## Description
+XXX
+XXX
+XXX
 ## Building 
 
 Follow exactly the instructions of the original SPARTA plugin suite.
