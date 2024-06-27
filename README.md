@@ -16,6 +16,9 @@ XXX
 Follow exactly the instructions of the original SPARTA plugin suite.
 
 MKL: https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl-download.html
+
+## Using
+Create config using MATLAB script 'DEMO_generate_config_for_vst.m' from https://github.com/AudioGroupCologne/SARITA
 ## Contributors 
 
 * **Gary Grutzek** - C/C++ programmer and algorithm design
@@ -23,7 +26,7 @@ MKL: https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl-downl
 * **Christoph Poerschmann** -  algorithm design
 * **Johannes M. Arend** - algorithm design
 
-contact :xxx.xxx@th-koeln.de
+contact : christoph.poerschmann@th-koeln.de
 
 ## License
 

@@ -76,3 +76,4 @@ ipch/
 *.tlog
 *.log
 build/
+*.DS_Store
