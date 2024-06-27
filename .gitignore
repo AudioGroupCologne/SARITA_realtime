@@ -9,6 +9,7 @@ SDKs/VST_SDK
 SDKs/VST2_SDK
 SDKs/Projucer
 SDKs/modules
+SDKs/Spatial_Audio_Framework
 lib/
 *.zip
 *.DS_Store
