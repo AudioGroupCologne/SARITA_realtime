@@ -826,7 +826,7 @@ void PluginEditor::paint (juce::Graphics& g)
             break;
         case k_warning_NinputCH:
             g.drawText(TRANS("Insufficient number of input channels (") + String(hVst->getTotalNumInputChannels()) +
-                       TRANS("/") + String(array2sh_getNumSensors(hA2sh)) + TRANS(")"),
+                       TRANS("/") + String(hVst->sarita.sparseGridSize) + TRANS(")"),
                        getBounds().getWidth()-225, 16, 530, 11,
                        Justification::centredLeft, true);
             break;
@@ -1108,7 +1108,7 @@ void PluginEditor::timerCallback(int timerID)
                 currentWarning = k_warning_supported_fs;
                 repaint(0, 0, getWidth(), 32);
             }
-            else if ((hVst->getCurrentNumInputs() < array2sh_getNumSensors(hA2sh))) {
+            else if ((hVst->getCurrentNumInputs() < (hVst->sarita.sparseGridSize) /*array2sh_getNumSensors(hA2sh)*/)) {
                 currentWarning = k_warning_NinputCH;
                 repaint(0, 0, getWidth(), 32);
             }

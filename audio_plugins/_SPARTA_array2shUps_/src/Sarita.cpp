@@ -51,6 +51,10 @@ int Sarita::readConfigFile(const char* path)
     // poor man's plausibility check
     if (denseGridSize > ARRAY2SH_MAX_NUM_SENSORS || denseGridSize == 0)
         return -1;
+	if (N > 7 || N < 0)
+		return -1;
+	
+	sparseGridSize = (int)(N+1)*(N+1);
     
     /* read config file data */
     // neighbor combinations
@@ -249,8 +253,8 @@ void Sarita::allocBuffers(int blocksize, int numInputCount)
     // stores samples which are shifted out of the frame
     shiftBuffer = (float**)calloc2d(denseGridSize, maxShiftOverall*2, sizeof(float));
     outData = (float**)calloc2d(denseGridSize, blocksize, sizeof(float));
-
-    input = new RingBuffer(numInputCount, bufferSize); // FIXME: matching channel num
+	
+    input = new RingBuffer(sparseGridSize, bufferSize);
     output = new RingBuffer(denseGridSize, bufferSize);
 
     currentTimeShift = (int*)malloc(idxNeighborsDenseLen * sizeof(int)); // TODO: correct size?

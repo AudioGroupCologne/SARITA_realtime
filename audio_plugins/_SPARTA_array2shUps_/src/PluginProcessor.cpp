@@ -307,6 +307,8 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
     int nCurrentBlockSize = buffer.getNumSamples();
     nNumOutputs = jmin(getTotalNumOutputChannels(), buffer.getNumChannels());
 	
+	int numInputSensors = jmin(sarita.sparseGridSize, nNumInputs);
+	
 	timeStamp = Time::currentTimeMillis(); // detect from editor if we are processing 
 	
     if (sarita.overlapChanged) {
@@ -324,16 +326,23 @@ void PluginProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& /*mid
     }
     else {
         // fill input ring buffer
-        for (int ch = 0; ch < nNumInputs; ch++) {
+        for (int ch = 0; ch < numInputSensors; ch++) {
             auto* channelData = buffer.getReadPointer(ch);
             sarita.input->push(channelData, nCurrentBlockSize, ch);
         }
+		// and if not enough input channels do skip
+		if (nNumInputs < sarita.sparseGridSize) {
+			sarita.input->skipPush(nHostBlockSize);
+		}
 
         // process frame when frame size fulfilled
         while (sarita.input->bufferedBytes >= nHostBlockSize) { // TODO: independent buffer size
-            // process frame for all channels
-            sarita.processFrame(nCurrentBlockSize, nNumInputs);
-
+            // process frame for all channels, and if not enough input channels do skip
+            sarita.processFrame(nCurrentBlockSize, numInputSensors);
+			if (nNumInputs < sarita.sparseGridSize) {
+				sarita.input->skipPop(nHostBlockSize); 
+			}
+			
             int overlapIdx = juce::jmax(nCurrentBlockSize-sarita.overlapSize, 0);
             for (uint32_t ch=0; ch<sarita.denseGridSize; ch++) {
 				// add overlapping part of current frame to last frame end

@@ -225,6 +225,9 @@ public:
     int8_t** combinationsPtr;       // Array describing which neighbors combination is required for each cross correlations
     float** denseGrid;              // Az, El and weight of each target sensor
     /* end of config data */
+	
+	// number of input channels with sensor data = (N+1)^2
+	int sparseGridSize;
 
     RingBuffer *input;
     RingBuffer *output;
