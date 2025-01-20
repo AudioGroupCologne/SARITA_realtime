@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <JUCERPROJECT id="lfkRjX" name="sparta_array2shUps" projectType="audioplug"
-              version="0.0.2" bundleIdentifier="com.AALTO.SPARTA" includeBinaryInAppConfig="1"
+              version="0.0.4" bundleIdentifier="com.AALTO.SPARTA" includeBinaryInAppConfig="1"
               buildVST="1" buildAU="0" pluginName="sparta_array2shUps" pluginDesc="sparta_array2shUps"
               pluginManufacturer="AALTO" pluginManufacturerCode="LEOM" pluginCode="ASUP"
               pluginIsSynth="0" pluginWantsMidiIn="0" pluginProducesMidiOut="0"
@@ -302,18 +302,17 @@
       </MODULEPATHS>
     </VS2017>
     <XCODE_MAC targetFolder="make/MacOSX/Xcode/" vstFolder="../../../SDKs/VST3 SDK"
-               vst3Folder="../../../../SDKs/VST3_SDK/" extraLinkerFlags="/opt/intel/oneapi/ipp/latest/lib/libippi.a  /opt/intel/oneapi/ipp/latest/lib/libipps.a /opt/intel/oneapi/ipp/latest/lib/libippvm.a /opt/intel/oneapi/ipp/latest/lib/libippcore.a&#10;/opt/intel/oneapi/mkl/latest/lib/libmkl_intel_lp64.a /opt/intel/oneapi/mkl/latest/lib/libmkl_sequential.a /opt/intel/oneapi/mkl/latest/lib/libmkl_core.a &#10;-lpthread -lm -ldl"
+               vst3Folder="../../../../SDKs/VST3_SDK/" extraLinkerFlags="-lpthread -lm -ldl"
                extraCompilerFlags="-pedantic&#10;-W &#10;-Wall &#10;-Wextra&#10;"
-               extraDefs="SAF_USE_INTEL_MKL_LP64&#10;SAF_USE_INTEL_IPP" xcodeValidArchs="i386,x86_64">
+               extraDefs="SAF_USE_APPLE_ACCELERATE" xcodeValidArchs="arm64,x86_64">
       <CONFIGURATIONS>
         <CONFIGURATION name="Debug" isDebug="1" optimisation="1" targetName="sparta_array2shUpsd"
-                       binaryPath="" headerPath="../../../../../SDKs/Spatial_Audio_Framework/framework/include&#10;../../../../../SDKs/Spatial_Audio_Framework/examples/include&#10;../../../../../SDKs/VST2_SDK&#10;/opt/intel/oneapi/mkl/latest/include&#10;/opt/intel/oneapi/ipp/latest/include"
-                       osxArchitecture="Native" osxCompatibility="10.10 SDK" enablePluginBinaryCopyStep="1"
-                       macOSDeploymentTarget="10.10" libraryPath="/opt/intel/oneapi/mkl/latest/lib&#10;/opt/intel/oneapi/ipp/latest/lib"/>
-        <CONFIGURATION name="Release" isDebug="0" optimisation="3" targetName="sparta_array2shUps"
-                       binaryPath="" headerPath="../../../../../SDKs/Spatial_Audio_Framework/framework/include&#10;../../../../../SDKs/Spatial_Audio_Framework/examples/include&#10;../../../../../SDKs/VST2_SDK&#10;/opt/intel/oneapi/mkl/latest/include&#10;/opt/intel/oneapi/ipp/latest/include"
-                       osxArchitecture="Native" osxCompatibility="10.10 SDK" enablePluginBinaryCopyStep="1"
-                       linkTimeOptimisation="1" macOSDeploymentTarget="10.10" libraryPath="/opt/intel/oneapi/mkl/latest/lib&#10;/opt/intel/oneapi/ipp/latest/lib"/>
+                       binaryPath="" headerPath="../../../../../SDKs/Spatial_Audio_Framework/framework/include&#10;../../../../../SDKs/Spatial_Audio_Framework/examples/include&#10;../../../../../SDKs/VST2_SDK&#10;../../../../../SDKs/JUCE"
+                       osxCompatibility="10.13 SDK" enablePluginBinaryCopyStep="1" macOSDeploymentTarget="10.13"/>
+        <CONFIGURATION name="Release" isDebug="0" optimisation="1" targetName="sparta_array2shUps"
+                       binaryPath="" headerPath="../../../../../SDKs/Spatial_Audio_Framework/framework/include&#10;../../../../../SDKs/Spatial_Audio_Framework/examples/include&#10;../../../../../SDKs/VST2_SDK&#10;../../../../../SDKs/JUCE"
+                       osxCompatibility="10.13 SDK" enablePluginBinaryCopyStep="1" linkTimeOptimisation="1"
+                       macOSDeploymentTarget="10.13"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_opengl" path="../../SDKs/JUCE/modules/"/>
